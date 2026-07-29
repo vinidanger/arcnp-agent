@@ -56,6 +56,16 @@ class ProcessRunner
         return Process::run(['id', '-u', $username])->successful();
     }
 
+    public function createAddonDirectory(string $username, string $subdir): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/create-addon-directory.sh'), $username, $subdir]);
+    }
+
+    public function deleteAddonDirectory(string $username, string $subdir): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/delete-addon-directory.sh'), $username, $subdir]);
+    }
+
     /**
      * Certbot/Let's Encrypt envolve chamada de rede externa — timeout
      * bem maior que os outros comandos (e por isso essa Action é

@@ -110,10 +110,10 @@ install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-
 visudo -c
 ```
 
-Autoriza exatamente 5 comandos: criar/remover usuário de hospedagem
-(via os scripts em `scripts/`), testar config do nginx e recarregar
-nginx/php-fpm-hosting. Nada além disso — repare que não autoriza
-recarregar o `php-fpm.service` do Painel/Agent, só o `php-fpm-hosting`.
+Autoriza exatamente os comandos fixos que o Agent precisa (todos em
+`scripts/*.sh`, testar/recarregar nginx e php-fpm-hosting) — repare que
+não autoriza recarregar o `php-fpm.service` do Painel/Agent, só o
+`php-fpm-hosting`.
 
 ## 9. Fila assíncrona (systemd)
 
@@ -178,6 +178,8 @@ vem com o pacote `certbot` (timer `certbot-renew.timer` próprio do
 pacote), cobre os certificados emitidos pelo Agent também, sem
 configuração extra.
 
-## Ainda não incluído
+## 13. Domínios adicionais / subdomínios
 
-- **Domínios adicionais/subdomínios por conta** — fica para depois.
+Sem passo extra de instalação — reaproveitam o mesmo usuário Linux,
+pool PHP-FPM e ACL da conta principal (só ganham um subdiretório
+dedicado dentro de `public_html` e seu próprio vhost).

@@ -14,7 +14,9 @@ use App\Actions\Linux\DeleteSystemUserAction;
 use App\Actions\Php\CreatePhpFpmPoolAction;
 use App\Actions\Php\DeletePhpFpmPoolAction;
 use App\Actions\Ssl\IssueSslCertificateAction;
+use App\Actions\Web\CreateAddonDomainAction;
 use App\Actions\Web\CreateVirtualHostAction;
+use App\Actions\Web\DeleteAddonDomainAction;
 use App\Actions\Web\DeleteVirtualHostAction;
 use InvalidArgumentException;
 
@@ -39,6 +41,8 @@ class ActionRegistry
         'hosting.suspend' => SuspendHostingAccountAction::class,
         'hosting.reactivate' => ReactivateHostingAccountAction::class,
         'ssl.issue_certificate' => IssueSslCertificateAction::class,
+        'web.create_addon_domain' => CreateAddonDomainAction::class,
+        'web.delete_addon_domain' => DeleteAddonDomainAction::class,
     ];
 
     public static function resolve(string $action): AgentAction

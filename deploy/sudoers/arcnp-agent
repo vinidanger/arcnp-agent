@@ -15,3 +15,5 @@ arcnpagent ALL=(root) NOPASSWD: /usr/sbin/nginx -t
 arcnpagent ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx
 arcnpagent ALL=(root) NOPASSWD: /usr/bin/systemctl reload php-fpm-hosting
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/issue-ssl-certificate.sh *
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/create-addon-directory.sh *
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/delete-addon-directory.sh *
