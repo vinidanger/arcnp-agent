@@ -36,7 +36,7 @@ resolve() {
     local rel="$1"
     rel="${rel#/}"
 
-    if [[ "$rel" == *$'\0'* ]] || [[ "$rel" =~ (^|/)\.\.(/|$) ]]; then
+    if [[ "$rel" =~ (^|/)\.\.(/|$) ]]; then
         echo "Caminho inválido: $rel" >&2
         exit 1
     fi
