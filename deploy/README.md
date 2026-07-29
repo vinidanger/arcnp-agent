@@ -251,3 +251,84 @@ são tmpfs, recriados vazios), considere adicionar
 `RuntimeDirectory=php$v-fpm` ao unit file de cada serviço via
 `systemctl edit php$v-php-fpm` — mesma lógica do
 `deploy/systemd/php-fpm-hosting.service`.
+
+## 15. phpMyAdmin (acesso via SSO do Painel)
+
+Instância única por servidor (não por conta), numa pool/vhost isolados
+— acesso entra sempre via link de uso único gerado pelo Painel, nunca
+por senha digitada direto no phpMyAdmin. Ver `app/Support/DatabaseSsoToken`
+no Painel pra como o token é gerado.
+
+Usuário e diretórios dedicados:
+
+```
+useradd --system --home-dir /opt/phpmyadmin --shell /sbin/nologin pma
+
+mkdir -p /opt/phpmyadmin /var/lib/pma-sso/sessions /var/lib/pma-sso/nonces /var/log/php-fpm
+chown -R pma:pma /opt/phpmyadmin /var/lib/pma-sso
+```
+
+Baixar o phpMyAdmin (troque a versão se quiser outra) direto do site
+oficial — evita depender de pacote de repositório de terceiros:
+
+```
+cd /tmp
+curl -LO https://www.phpmyadmin.net/downloads/phpMyAdmin-latest-all-languages.tar.gz
+tar -xzf phpMyAdmin-latest-all-languages.tar.gz
+rsync -a --delete phpMyAdmin-*-all-languages/ /opt/phpmyadmin/
+rm -rf phpMyAdmin-*-all-languages phpMyAdmin-latest-all-languages.tar.gz
+chown -R pma:pma /opt/phpmyadmin
+```
+
+Script-ponte de SSO e config, a partir dos templates deste repo:
+
+```
+cp deploy/phpmyadmin/sso-login.php /opt/phpmyadmin/sso-login.php
+cp deploy/phpmyadmin/config.inc.php.example /opt/phpmyadmin/config.inc.php
+cp deploy/phpmyadmin/pma-secret.php.example /opt/phpmyadmin/pma-secret.php
+chown pma:pma /opt/phpmyadmin/sso-login.php /opt/phpmyadmin/config.inc.php /opt/phpmyadmin/pma-secret.php
+chmod 0400 /opt/phpmyadmin/pma-secret.php
+```
+
+Editar os dois arquivos copiados:
+- `config.inc.php` — gerar `blowfish_secret` com `openssl rand -base64 32 | head -c 32`
+- `pma-secret.php` — colar o MESMO valor de `AGENT_SHARED_SECRET` do `.env` deste Agent (`grep AGENT_SHARED_SECRET /opt/arcnp-agent/.env`)
+
+Pool PHP-FPM isolada e serviço:
+
+```
+mkdir -p /etc/php-fpm-pma.d
+cp deploy/php-fpm/php-fpm-pma.conf /etc/php-fpm-pma.conf
+cp deploy/php-fpm/pma-pool.conf /etc/php-fpm-pma.d/pma.conf
+cp deploy/systemd/php-fpm-pma.service /etc/systemd/system/
+
+systemctl daemon-reload
+systemctl enable --now php-fpm-pma
+```
+
+Nginx (porta própria 8444, nunca 80/443 — essas ficam só pros vhosts
+de contas de hospedagem):
+
+```
+cp deploy/nginx/phpmyadmin.conf /etc/nginx/conf.d/phpmyadmin.conf
+nginx -t && systemctl reload nginx
+```
+
+SELinux (se estiver enforcing) e firewall — porta pública dessa vez
+(o navegador do admin/cliente acessa direto, diferente da 8443 que é
+só Painel → Agent):
+
+```
+setsebool -P httpd_can_network_connect_db 1
+firewall-cmd --permanent --add-port=8444/tcp
+firewall-cmd --reload
+```
+
+Limpeza dos nonces de uso único (evita acúmulo indefinido de arquivos
+— cada um é só alguns bytes, mas sem limpeza cresce pra sempre):
+
+```
+cat > /etc/cron.d/pma-sso-nonces << 'EOF'
+15 * * * * root find /var/lib/pma-sso/nonces -mmin +60 -delete
+EOF
+```

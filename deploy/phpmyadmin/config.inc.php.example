@@ -1,0 +1,21 @@
+<?php
+
+// Copiar para /opt/phpmyadmin/config.inc.php. blowfish_secret é usado
+// pelo próprio phpMyAdmin pra criptografar o cookie da sessão de
+// signon (exigido mesmo com auth_type=signon) — gerar com:
+//   openssl rand -base64 32 | head -c 32
+$cfg['blowfish_secret'] = 'GERAR_STRING_ALEATORIA_DE_32_CARACTERES';
+
+$i = 1;
+$cfg['Servers'][$i]['auth_type'] = 'signon';
+$cfg['Servers'][$i]['SignonSession'] = 'SignonSession';
+$cfg['Servers'][$i]['SignonURL'] = '/sso-login.php';
+$cfg['Servers'][$i]['host'] = 'localhost';
+$cfg['Servers'][$i]['compress'] = false;
+$cfg['Servers'][$i]['AllowNoPassword'] = false;
+
+// Sessão de signon com validade curta — o token que a gera já expira
+// em 60s, isso aqui é só o tempo que a sessão do phpMyAdmin em si
+// fica válida depois do login.
+$cfg['LoginCookieValidity'] = 3600;
+$cfg['ShowPhpInfo'] = false;
