@@ -13,6 +13,7 @@ use App\Actions\Linux\CreateSystemUserAction;
 use App\Actions\Linux\DeleteSystemUserAction;
 use App\Actions\Php\CreatePhpFpmPoolAction;
 use App\Actions\Php\DeletePhpFpmPoolAction;
+use App\Actions\Ssl\IssueSslCertificateAction;
 use App\Actions\Web\CreateVirtualHostAction;
 use App\Actions\Web\DeleteVirtualHostAction;
 use InvalidArgumentException;
@@ -37,6 +38,7 @@ class ActionRegistry
         'database.delete_mysql' => DeleteMysqlDatabaseAction::class,
         'hosting.suspend' => SuspendHostingAccountAction::class,
         'hosting.reactivate' => ReactivateHostingAccountAction::class,
+        'ssl.issue_certificate' => IssueSslCertificateAction::class,
     ];
 
     public static function resolve(string $action): AgentAction

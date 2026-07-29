@@ -16,4 +16,10 @@ return [
     'php_fpm_socket_dir' => '/run/php-fpm-hosting',
     'php_fpm_service' => 'php-fpm-hosting',
     'default_php_version' => env('AGENT_DEFAULT_PHP_VERSION', '8.3'),
+
+    /*
+     * E-mail usado no registro da conta Let's Encrypt (avisos de
+     * expiração/problema de renovação — não é por domínio, é fixo).
+     */
+    'ssl_admin_email' => env('AGENT_SSL_ADMIN_EMAIL'),
 ];

@@ -56,6 +56,19 @@ class ProcessRunner
         return Process::run(['id', '-u', $username])->successful();
     }
 
+    /**
+     * Certbot/Let's Encrypt envolve chamada de rede externa — timeout
+     * bem maior que os outros comandos (e por isso essa Action é
+     * assíncrona no Agent, não roda inline na resposta HTTP).
+     */
+    public function issueSslCertificate(string $domain, string $webroot): void
+    {
+        $this->exec([
+            'sudo', '-n', base_path('scripts/issue-ssl-certificate.sh'),
+            $domain, $webroot, config('provisioning.ssl_admin_email'),
+        ], 120);
+    }
+
     private function exec(array $command, int $timeout = 30): void
     {
         $result = Process::timeout($timeout)->run($command);

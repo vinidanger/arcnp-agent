@@ -139,9 +139,7 @@ heartbeat por tempo demais (ver `servers:mark-stale-offline` no Painel).
 
 O Agent precisa criar banco/usuário MySQL por conta de hospedagem, mas
 **nunca** recebe a senha real do `root` do MariaDB — só um usuário
-dedicado com privilégio de criar/remover banco e usuário, sem acesso
-de leitura/escrita a dados de bancos existentes (nem os do próprio
-Painel):
+dedicado:
 
 ```
 mysql -u root -p
@@ -149,14 +147,37 @@ mysql -u root -p
 
 ```sql
 CREATE USER 'arcnpagent'@'localhost' IDENTIFIED BY 'SENHA_FORTE_AQUI';
-GRANT CREATE, DROP, CREATE USER, RELOAD ON *.* TO 'arcnpagent'@'localhost' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON *.* TO 'arcnpagent'@'localhost' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 ```
+
+`WITH GRANT OPTION` só deixa delegar privilégios que a própria conta
+possui — por isso não dá pra restringir a `CREATE/DROP` apenas: pra
+poder fazer `GRANT ALL PRIVILEGES` no banco de cada conta de
+hospedagem (o passo final de `database.create_mysql`), o `arcnpagent`
+precisa ter esses privilégios de dados também. Na prática isso dá a
+essa conta acesso equivalente a root do MySQL — mesma coisa que a
+maioria dos painéis de hospedagem reais faz.
 
 Preenche `AGENT_MYSQL_ADMIN_USER=arcnpagent` e
 `AGENT_MYSQL_ADMIN_PASSWORD=SENHA_FORTE_AQUI` no `.env` do Agent.
 
+## 12. SSL (Let's Encrypt)
+
+```
+dnf install -y certbot
+```
+
+Preenche `AGENT_SSL_ADMIN_EMAIL` no `.env` do Agent (e-mail da conta
+Let's Encrypt, usado só para avisos de renovação/expiração).
+
+A emissão usa o método `--webroot` contra o vhost HTTP simples que já
+existe (`CreateVirtualHostAction`) — o domínio precisa estar resolvendo
+de verdade para este servidor antes de emitir. Renovação automática já
+vem com o pacote `certbot` (timer `certbot-renew.timer` próprio do
+pacote), cobre os certificados emitidos pelo Agent também, sem
+configuração extra.
+
 ## Ainda não incluído
 
-- **SSL (Let's Encrypt) e domínios adicionais** — ficam para depois
-  (banco de dados e suspender/reativar conta já estão cobertos).
+- **Domínios adicionais/subdomínios por conta** — fica para depois.

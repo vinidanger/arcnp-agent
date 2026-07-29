@@ -1,0 +1,65 @@
+<?php
+
+namespace App\Actions\Ssl;
+
+use App\Actions\Contracts\AgentAction;
+use App\Services\System\ProcessRunner;
+use App\Services\System\TemplateRenderer;
+use App\Support\DomainName;
+use App\Support\LinuxUsername;
+use App\Support\NginxVhost;
+use App\Support\PhpFpmPool;
+use Illuminate\Support\Facades\File;
+
+/**
+ * Assíncrona de propósito — depende de chamada de rede externa
+ * (Let's Encrypt) que pode levar alguns segundos e falhar por motivos
+ * fora do nosso controle (rate limit, validação de DNS, etc).
+ *
+ * Assume que o vhost HTTP simples (CreateVirtualHostAction) já existe
+ * e está servindo o domínio na porta 80 — é contra ele que o certbot
+ * valida via webroot (o próprio stub HTTP já deixa `.well-known`
+ * passar, não precisa de nenhum preparo extra antes de emitir).
+ */
+class IssueSslCertificateAction implements AgentAction
+{
+    public function __construct(
+        private ProcessRunner $processRunner,
+        private TemplateRenderer $templateRenderer,
+    ) {
+    }
+
+    public function isAsync(): bool
+    {
+        return true;
+    }
+
+    public function execute(array $payload): array
+    {
+        $username = LinuxUsername::validate($payload['username'] ?? '');
+        $domain = DomainName::validate($payload['domain'] ?? '');
+
+        $homeDir = config('provisioning.home_base_dir')."/{$username}";
+        $documentRoot = "{$homeDir}/public_html";
+
+        $this->processRunner->issueSslCertificate($domain, $documentRoot);
+
+        $certPath = "/etc/letsencrypt/live/{$domain}/fullchain.pem";
+        $keyPath = "/etc/letsencrypt/live/{$domain}/privkey.pem";
+
+        $contents = $this->templateRenderer->render('nginx-vhost-ssl', [
+            'domain' => $domain,
+            'document_root' => $documentRoot,
+            'php_fpm_socket' => PhpFpmPool::socketPath($username),
+            'ssl_cert_path' => $certPath,
+            'ssl_cert_key_path' => $keyPath,
+        ]);
+
+        File::put(NginxVhost::configPath($domain), $contents);
+
+        $this->processRunner->testNginxConfig();
+        $this->processRunner->reloadNginx();
+
+        return ['domain' => $domain, 'ssl_issued' => true];
+    }
+}
