@@ -1,0 +1,15 @@
+[Unit]
+Description=Arcnp Agent - queue worker (ações assíncronas)
+After=network.target php-fpm.service
+
+[Service]
+Type=simple
+User=arcnpagent
+Group=arcnpagent
+WorkingDirectory=/opt/arcnp-agent
+ExecStart=/usr/bin/php artisan queue:work --sleep=1 --tries=3 --max-time=3600
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

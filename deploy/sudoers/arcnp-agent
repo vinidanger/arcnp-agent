@@ -1,0 +1,17 @@
+# Instalar em /etc/sudoers.d/arcnp-agent (chmod 0440, dono root:root).
+#
+# Regra de ouro: comandos com argumento fixo ficam pinados por completo
+# (ex.: "systemctl reload nginx", não "systemctl *"). Só os dois scripts
+# wrapper abaixo aceitam argumento livre (o username varia por conta) —
+# e por isso a validação do argumento é feita DENTRO do script
+# (scripts/create-hosting-user.sh, scripts/delete-hosting-user.sh),
+# nunca confiando no sudoers para isso.
+#
+# Caminho abaixo assume instalação em /opt/arcnp-agent (ver deploy/README.md).
+# Se o caminho de instalação mudar, atualize as linhas abaixo também.
+
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/create-hosting-user.sh *
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/delete-hosting-user.sh *
+arcnpagent ALL=(root) NOPASSWD: /usr/sbin/nginx -t
+arcnpagent ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx
+arcnpagent ALL=(root) NOPASSWD: /usr/bin/systemctl reload php-fpm

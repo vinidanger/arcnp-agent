@@ -1,0 +1,10 @@
+[Unit]
+Description=Arcnp Agent - heartbeat (disparado pelo timer)
+After=network.target
+
+[Service]
+Type=oneshot
+User=arcnpagent
+Group=arcnpagent
+WorkingDirectory=/opt/arcnp-agent
+ExecStart=/usr/bin/php artisan agent:heartbeat

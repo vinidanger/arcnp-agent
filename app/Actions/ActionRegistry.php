@@ -1,0 +1,53 @@
+<?php
+
+namespace App\Actions;
+
+use App\Actions\Contracts\AgentAction;
+use App\Actions\Demo\DemoAsyncAction;
+use App\Actions\Demo\HealthCheckAction;
+use App\Actions\Linux\CreateSystemUserAction;
+use App\Actions\Linux\DeleteSystemUserAction;
+use App\Actions\Php\CreatePhpFpmPoolAction;
+use App\Actions\Php\DeletePhpFpmPoolAction;
+use App\Actions\Web\CreateVirtualHostAction;
+use App\Actions\Web\DeleteVirtualHostAction;
+use InvalidArgumentException;
+
+/**
+ * Whitelist fechada de ações que o Painel pode disparar. Nenhum comando
+ * livre é aceito — só o que está mapeado aqui.
+ */
+class ActionRegistry
+{
+    /** @var array<string, class-string<AgentAction>> */
+    private const MAP = [
+        'demo.health_check' => HealthCheckAction::class,
+        'demo.async' => DemoAsyncAction::class,
+        'linux.create_user' => CreateSystemUserAction::class,
+        'linux.delete_user' => DeleteSystemUserAction::class,
+        'web.create_vhost' => CreateVirtualHostAction::class,
+        'web.delete_vhost' => DeleteVirtualHostAction::class,
+        'php.create_pool' => CreatePhpFpmPoolAction::class,
+        'php.delete_pool' => DeletePhpFpmPoolAction::class,
+    ];
+
+    public static function resolve(string $action): AgentAction
+    {
+        if (! isset(self::MAP[$action])) {
+            throw new InvalidArgumentException("Ação não permitida: {$action}");
+        }
+
+        return app(self::MAP[$action]);
+    }
+
+    public static function exists(string $action): bool
+    {
+        return isset(self::MAP[$action]);
+    }
+
+    /** @return list<string> */
+    public static function allowed(): array
+    {
+        return array_keys(self::MAP);
+    }
+}
