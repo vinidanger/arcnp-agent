@@ -4,6 +4,7 @@ namespace App\Actions;
 
 use App\Actions\Backup\CreateBackupAction;
 use App\Actions\Contracts\AgentAction;
+use App\Actions\Cron\SyncCronJobsAction;
 use App\Actions\Database\CreateMysqlDatabaseAction;
 use App\Actions\Database\DeleteMysqlDatabaseAction;
 use App\Actions\Demo\DemoAsyncAction;
@@ -23,6 +24,8 @@ use App\Actions\Linux\DeleteSystemUserAction;
 use App\Actions\Php\CreatePhpFpmPoolAction;
 use App\Actions\Php\DeletePhpFpmPoolAction;
 use App\Actions\Php\SwitchPhpVersionAction;
+use App\Actions\Ssh\SetSshAccessAction;
+use App\Actions\Ssh\SyncSshKeysAction;
 use App\Actions\Ssl\IssueSslCertificateAction;
 use App\Actions\Web\CreateAddonDomainAction;
 use App\Actions\Web\CreateVirtualHostAction;
@@ -65,6 +68,9 @@ class ActionRegistry
         'files.delete' => DeleteFileAction::class,
         'files.rename' => RenameFileAction::class,
         'disk.usage' => DiskUsageAction::class,
+        'cron.sync' => SyncCronJobsAction::class,
+        'ssh.set_enabled' => SetSshAccessAction::class,
+        'ssh.sync_keys' => SyncSshKeysAction::class,
     ];
 
     public static function resolve(string $action): AgentAction

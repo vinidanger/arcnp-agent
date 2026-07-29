@@ -132,6 +132,52 @@ class ProcessRunner
         return json_decode($result->output(), true) ?? [];
     }
 
+    /**
+     * Troca o shell de login entre /bin/bash e /sbin/nologin —
+     * autenticação continua sempre só por chave (PasswordAuthentication
+     * é "no" globalmente no sshd_config, não é por conta).
+     */
+    public function setSshAccess(string $username, bool $enabled): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/manage-ssh.sh'), $username, 'set-shell', $enabled ? 'enabled' : 'disabled']);
+    }
+
+    /**
+     * $keysContent já vem pronto (uma chave pública por linha, cada
+     * uma já validada pela Action) — regrava ~/.ssh/authorized_keys
+     * por inteiro, mesmo padrão idempotente do cron/backup.
+     */
+    public function syncSshKeys(string $username, string $keysContent): void
+    {
+        $result = Process::timeout(30)->input($keysContent)->run([
+            'sudo', '-n', base_path('scripts/manage-ssh.sh'), $username, 'sync-keys',
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException(
+                'Sincronização de chaves SSH falhou: '.trim($result->errorOutput() ?: $result->output())
+            );
+        }
+    }
+
+    /**
+     * $cronLines já vem pronto (uma linha de cron completa por item,
+     * já validada campo a campo pela Action) — o script só regrava o
+     * arquivo por inteiro e revalida como defesa em profundidade.
+     */
+    public function syncCronJobs(string $username, string $cronLines): void
+    {
+        $result = Process::timeout(30)->input($cronLines)->run([
+            'sudo', '-n', base_path('scripts/sync-cron.sh'), $username,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException(
+                'Sincronização de cron falhou: '.trim($result->errorOutput() ?: $result->output())
+            );
+        }
+    }
+
     public function diskUsageBytes(string $username): int
     {
         $result = Process::timeout(60)->run([

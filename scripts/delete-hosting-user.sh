@@ -15,5 +15,6 @@ if ! id -u "$USERNAME" >/dev/null 2>&1; then
 fi
 
 userdel -r "$USERNAME"
+rm -f "/etc/cron.d/arcnp-$USERNAME"
 
 echo "OK"

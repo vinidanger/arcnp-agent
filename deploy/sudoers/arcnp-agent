@@ -20,6 +20,8 @@ arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/delete-addon-directory.
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/create-backup.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-file.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/disk-usage.sh *
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/sync-cron.sh *
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-ssh.sh *
 
 # Uma linha por versão de PHP suportada (config/provisioning.php) — cada
 # uma isolada no próprio serviço, reload de uma nunca afeta as outras.

@@ -400,3 +400,54 @@ chmod +x scripts/disk-usage.sh
 install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
 visudo -c
 ```
+
+## 19. Cron jobs do cliente
+
+Cada conta ganha um arquivo `/etc/cron.d/arcnp-{username}` (formato
+cron.d, com o campo de usuário — roda como o dono da conta, nunca como
+root). O Painel é sempre a fonte da verdade: toda mudança reenvia a
+lista completa, o Agent reescreve o arquivo inteiro.
+
+```
+chmod +x scripts/sync-cron.sh
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+Sem passo de instalação — `cron`/`crond` já observa `/etc/cron.d/`
+automaticamente, não precisa reiniciar nada. Ao excluir uma conta,
+`delete-hosting-user.sh` já remove o arquivo junto.
+
+## 20. Acesso SSH por conta
+
+Shell completo (`/bin/bash`), nunca chroot — libera/revoga trocando o
+shell de login entre `/bin/bash` e `/sbin/nologin` (padrão). Chaves
+públicas ficam em `~/.ssh/authorized_keys`, reescrito por inteiro a
+cada sincronização (mesmo padrão do cron).
+
+```
+chmod +x scripts/manage-ssh.sh
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+**Pré-requisito obrigatório, não pular**: autenticação por senha
+precisa estar desligada globalmente no SSH do servidor — sem isso,
+uma conta com shell liberado mas SENHA fraca vira porta de entrada,
+já que a autenticação por chave deste recurso não substitui uma
+`PasswordAuthentication` ainda ligada por fora dele:
+
+```
+grep -i '^PasswordAuthentication' /etc/ssh/sshd_config
+```
+
+Se não mostrar `PasswordAuthentication no` (ou mostrar `yes`/nada):
+
+```
+sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+systemctl restart sshd
+```
+
+(Confirma antes que você já tem acesso por chave configurado pro
+próprio usuário `root`/admin — reiniciar o sshd com isso errado te
+tranca fora do servidor.)
