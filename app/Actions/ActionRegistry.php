@@ -8,6 +8,13 @@ use App\Actions\Database\CreateMysqlDatabaseAction;
 use App\Actions\Database\DeleteMysqlDatabaseAction;
 use App\Actions\Demo\DemoAsyncAction;
 use App\Actions\Demo\HealthCheckAction;
+use App\Actions\Files\CreateDirectoryAction;
+use App\Actions\Files\CreateFileAction;
+use App\Actions\Files\DeleteFileAction;
+use App\Actions\Files\ListDirectoryAction;
+use App\Actions\Files\ReadFileAction;
+use App\Actions\Files\RenameFileAction;
+use App\Actions\Files\WriteFileAction;
 use App\Actions\Hosting\ReactivateHostingAccountAction;
 use App\Actions\Hosting\SuspendHostingAccountAction;
 use App\Actions\Linux\CreateSystemUserAction;
@@ -49,6 +56,13 @@ class ActionRegistry
         'php.switch_version' => SwitchPhpVersionAction::class,
         'web.update_vhost_php_version' => UpdateVirtualHostPhpVersionAction::class,
         'backup.create' => CreateBackupAction::class,
+        'files.list' => ListDirectoryAction::class,
+        'files.read' => ReadFileAction::class,
+        'files.write' => WriteFileAction::class,
+        'files.create_directory' => CreateDirectoryAction::class,
+        'files.create_file' => CreateFileAction::class,
+        'files.delete' => DeleteFileAction::class,
+        'files.rename' => RenameFileAction::class,
     ];
 
     public static function resolve(string $action): AgentAction

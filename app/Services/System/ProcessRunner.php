@@ -132,6 +132,36 @@ class ProcessRunner
         return json_decode($result->output(), true) ?? [];
     }
 
+    /**
+     * Único ponto que muta arquivos dentro de public_html (criar,
+     * salvar, apagar, renomear) — listar/ler não passam por aqui, o
+     * Agent já tem ACL de leitura direto (ver FileManagerPath). $content
+     * vai pro STDIN do script (nunca argv — arquivo pode ser grande e
+     * argv tem limite de tamanho do SO).
+     */
+    public function manageFile(string $username, string $operation, string $path, ?string $path2 = null, ?string $content = null): void
+    {
+        $command = ['sudo', '-n', base_path('scripts/manage-file.sh'), $username, $operation, $path];
+
+        if ($path2 !== null) {
+            $command[] = $path2;
+        }
+
+        $process = Process::timeout(30);
+
+        if ($content !== null) {
+            $process = $process->input($content);
+        }
+
+        $result = $process->run($command);
+
+        if ($result->failed()) {
+            throw new RuntimeException(
+                'Operação de arquivo falhou ('.$operation.'): '.trim($result->errorOutput() ?: $result->output())
+            );
+        }
+    }
+
     private function exec(array $command, int $timeout = 30): void
     {
         $result = Process::timeout($timeout)->run($command);

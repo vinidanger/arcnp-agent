@@ -36,4 +36,13 @@ setfacl -m u:nginx:x "$HOME_DIR"
 setfacl -R -m u:nginx:rx "$HOME_DIR/public_html"
 setfacl -d -m u:nginx:rx "$HOME_DIR/public_html"
 
+# Mesma lógica pro Agent (usuário arcnpagent) — só leitura/travessia,
+# nunca escrita direta. O gerenciador de arquivos lista/lê via essa
+# ACL; qualquer mutação (criar, salvar, apagar, renomear) passa pelo
+# script sudo manage-file.sh, que roda como root e ajusta a posse de
+# volta pro dono da conta.
+setfacl -m u:arcnpagent:x "$HOME_DIR"
+setfacl -R -m u:arcnpagent:rx "$HOME_DIR/public_html"
+setfacl -d -m u:arcnpagent:rx "$HOME_DIR/public_html"
+
 echo "OK"

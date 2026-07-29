@@ -358,3 +358,33 @@ home do cliente exigem root, por isso passam pelo script sudo. Nada
 fica em `/opt/arcnp-agent/storage` depois de pronto: o diretório
 temporário de dump é apagado ao final de cada execução, sucesso ou
 falha.
+
+## 17. Gerenciador de arquivos
+
+Listar/ler é leitura direta (ACL do `arcnpagent` em `public_html`,
+concedida por `create-hosting-user.sh` — contas criadas ANTES dessa
+mudança precisam da ACL retroativa abaixo). Criar/salvar/apagar/
+renomear passam pelo script sudo `manage-file.sh`, que ajusta a posse
+de volta pro dono da conta depois.
+
+```
+chmod +x scripts/manage-file.sh
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+Pra contas já existentes (criadas antes dessa fase), rodar uma vez pra
+cada uma — ou em lote, iterando `/home/*`:
+
+```
+for HOME_DIR in /home/*; do
+  USERNAME=$(basename "$HOME_DIR")
+  [[ -d "$HOME_DIR/public_html" ]] || continue
+  setfacl -m u:arcnpagent:x "$HOME_DIR"
+  setfacl -R -m u:arcnpagent:rx "$HOME_DIR/public_html"
+  setfacl -d -m u:arcnpagent:rx "$HOME_DIR/public_html"
+done
+```
+
+O gerenciador fica restrito a `public_html` — nunca o home inteiro
+(não expõe `backups/`, `logs/` etc. a navegação/exclusão por engano).
