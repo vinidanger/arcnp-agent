@@ -123,6 +123,19 @@ systemctl daemon-reload
 systemctl enable --now arcnp-agent-queue
 ```
 
+**Importante em todo deploy futuro:** esse é um processo `queue:work` de
+longa duração — ele carrega o código PHP uma vez na inicialização e não
+recarrega sozinho depois de um `git pull`. As Actions síncronas (pool,
+vhost, etc.) pegam código novo a cada request porque passam pelo
+PHP-FPM normal, mas as assíncronas (hoje só `ssl.issue_certificate`)
+continuam rodando com o código antigo até reiniciar o serviço:
+
+```
+systemctl restart arcnp-agent-queue
+```
+
+Sempre rodar isso depois de qualquer `git pull` no Agent.
+
 ## 10. Heartbeat (systemd timer)
 
 ```
