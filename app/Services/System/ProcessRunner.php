@@ -241,6 +241,59 @@ class ProcessRunner
         }
     }
 
+    /**
+     * Grava o zone file (validado via named-checkzone dentro do
+     * script) — NÃO recarrega. Pra zona nova, o arquivo precisa
+     * existir antes do zones.conf referenciar ela; pra edição de
+     * registro numa zona já existente, chamar reloadDnsZone() depois.
+     */
+    public function writeDnsZone(string $domain, string $zoneFileContent): void
+    {
+        $result = Process::timeout(30)->input($zoneFileContent)->run([
+            'sudo', '-n', base_path('scripts/manage-dns-zone.sh'), 'write-zone', $domain,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException(
+                'Escrita de zona DNS falhou: '.trim($result->errorOutput() ?: $result->output())
+            );
+        }
+    }
+
+    public function reloadDnsZone(string $domain): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/manage-dns-zone.sh'), 'reload-zone', $domain]);
+    }
+
+    /**
+     * Reescreve /etc/named/zones.conf por inteiro (lista completa de
+     * zonas ativas nesse servidor, o Painel é sempre a fonte da
+     * verdade) e recarrega o named inteiro — só necessário quando a
+     * LISTA de zonas muda (criar/apagar), não pra edição de registro.
+     */
+    public function syncDnsZonesConf(string $zonesConfContent): void
+    {
+        $result = Process::timeout(30)->input($zonesConfContent)->run([
+            'sudo', '-n', base_path('scripts/manage-dns-zone.sh'), 'sync-zones-conf',
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException(
+                'Sincronização de zones.conf falhou: '.trim($result->errorOutput() ?: $result->output())
+            );
+        }
+    }
+
+    /**
+     * Remove só o arquivo da zona — chamar depois de syncDnsZonesConf()
+     * já ter tirado ela do named.conf e recarregado (senão o named
+     * ainda espera o arquivo existir).
+     */
+    public function deleteDnsZone(string $domain): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/manage-dns-zone.sh'), 'delete-zone', $domain]);
+    }
+
     private function exec(array $command, int $timeout = 30): void
     {
         $result = Process::timeout($timeout)->run($command);

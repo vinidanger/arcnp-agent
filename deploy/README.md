@@ -456,3 +456,61 @@ Login por senha é inerentemente mais fraco que só chave (força bruta é
 possível) — considerar `fail2ban` monitorando o `sshd` pra mitigar,
 mesma recomendação que qualquer painel com essa opção (cPanel,
 DirectAdmin) já dá.
+
+## 21. Zona DNS (BIND9)
+
+Servidor autoritativo próprio — cada domínio com zona vira um arquivo
+em `/etc/named/zones/{domínio}.zone`, listado em
+`/etc/named/zones.conf` (o Painel sempre reenvia a lista COMPLETA de
+zonas ativas nesse servidor a cada criação/exclusão, o Agent reescreve
+esse arquivo inteiro — mesmo padrão idempotente do cron/SSH).
+
+```
+dnf install -y bind bind-utils
+
+mkdir -p /etc/named/zones
+touch /etc/named/zones.conf
+chown -R named:named /etc/named/zones /etc/named/zones.conf
+```
+
+Adicionar a inclusão no `/etc/named.conf` (fora do bloco `options {}`,
+normalmente logo depois dele):
+
+```
+include "/etc/named/zones.conf";
+```
+
+```
+named-checkconf
+systemctl enable --now named
+```
+
+Firewall (DNS usa TCP e UDP na porta 53 — diferente do resto do Agent,
+essa porta precisa ficar aberta pra qualquer resolver do mundo
+consultar, não só o IP do Painel):
+
+```
+firewall-cmd --permanent --add-port=53/tcp
+firewall-cmd --permanent --add-port=53/udp
+firewall-cmd --reload
+```
+
+Sudoers (script novo):
+
+```
+chmod +x scripts/manage-dns-zone.sh
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+**Pré-requisito fora do nosso sistema**: pra esse BIND ser autoritativo
+de verdade pra um domínio, os registros NS dele no REGISTRADOR
+precisam apontar pra um hostname (ex: `ns1.seudominio.com`) que
+resolva pro IP desse servidor — isso é configuração de glue
+record/registrador, não tem como automatizar. Sem isso, a zona existe
+aqui mas nenhum resolver do mundo pergunta pra ela.
+
+Essa é a integração mais sensível a infraestrutura real que já fizemos
+— não seria surpresa se `named-checkconf`/`named-checkzone` pegarem
+algo específico da distro na primeira zona de teste. Testar criando
+uma zona de teste antes de confiar em produção.

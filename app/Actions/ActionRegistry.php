@@ -10,6 +10,9 @@ use App\Actions\Database\DeleteMysqlDatabaseAction;
 use App\Actions\Demo\DemoAsyncAction;
 use App\Actions\Demo\HealthCheckAction;
 use App\Actions\Disk\DiskUsageAction;
+use App\Actions\Dns\CreateDnsZoneAction;
+use App\Actions\Dns\DeleteDnsZoneAction;
+use App\Actions\Dns\UpdateDnsZoneRecordsAction;
 use App\Actions\Files\CreateDirectoryAction;
 use App\Actions\Files\CreateFileAction;
 use App\Actions\Files\DeleteFileAction;
@@ -73,6 +76,9 @@ class ActionRegistry
         'ssh.set_enabled' => SetSshAccessAction::class,
         'ssh.sync_keys' => SyncSshKeysAction::class,
         'ssh.set_password' => SetSshPasswordAction::class,
+        'dns.create_zone' => CreateDnsZoneAction::class,
+        'dns.update_zone_records' => UpdateDnsZoneRecordsAction::class,
+        'dns.delete_zone' => DeleteDnsZoneAction::class,
     ];
 
     public static function resolve(string $action): AgentAction
