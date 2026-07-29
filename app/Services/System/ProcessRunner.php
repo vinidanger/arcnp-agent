@@ -40,9 +40,15 @@ class ProcessRunner
         $this->exec(['sudo', '-n', '/usr/bin/systemctl', 'reload', 'nginx']);
     }
 
+    /**
+     * Recarrega SÓ o php-fpm-hosting.service (pools de contas de
+     * hospedagem) — nunca o php-fpm.service do Painel/Agent, que
+     * ficaria momentaneamente indisponível a cada conta criada/removida
+     * se compartilhassem o mesmo serviço.
+     */
     public function reloadPhpFpm(): void
     {
-        $this->exec(['sudo', '-n', '/usr/bin/systemctl', 'reload', 'php-fpm']);
+        $this->exec(['sudo', '-n', '/usr/bin/systemctl', 'reload', config('provisioning.php_fpm_service')]);
     }
 
     public function userExists(string $username): bool

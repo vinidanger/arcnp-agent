@@ -64,16 +64,31 @@ cp deploy/nginx/arcnp-agent.conf /etc/nginx/conf.d/arcnp-agent.conf
 nginx -t && systemctl reload nginx
 ```
 
-## 6. Diretórios de config das contas de hospedagem
+## 6. PHP-FPM separado para contas de hospedagem
 
-As Actions de vhost e pool PHP-FPM escrevem os arquivos de config
-diretamente (sem sudo) — só o `nginx -t`/reload e a criação do
-usuário Linux exigem privilégio. Por isso o grupo do Agent precisa de
-escrita nesses dois diretórios:
+Toda vez que uma conta é criada/removida, o Agent recarrega o PHP-FPM
+pra ativar o pool novo — e um reload derruba momentaneamente **todos**
+os pools daquele serviço. Se fosse o mesmo `php-fpm.service` do
+Painel/Agent, cada conta nova causaria uma interrupção breve no
+próprio Painel (rodando no mesmo host). Por isso as contas de
+hospedagem ficam num serviço `php-fpm-hosting` totalmente separado:
 
 ```
-chgrp arcnpagent /etc/nginx/conf.d /etc/php-fpm.d
-chmod 2775 /etc/nginx/conf.d /etc/php-fpm.d
+mkdir -p /etc/php-fpm-hosting.d /var/log/php-fpm
+cp deploy/php-fpm/php-fpm-hosting.conf /etc/php-fpm-hosting.conf
+cp deploy/systemd/php-fpm-hosting.service /etc/systemd/system/
+
+systemctl daemon-reload
+systemctl enable --now php-fpm-hosting
+```
+
+E os diretórios de config que as Actions escrevem diretamente (sem
+sudo — só o `nginx -t`/reload e a criação do usuário Linux exigem
+privilégio):
+
+```
+chgrp arcnpagent /etc/nginx/conf.d /etc/php-fpm-hosting.d
+chmod 2775 /etc/nginx/conf.d /etc/php-fpm-hosting.d
 ```
 
 (`2775` = setgid, para que todo arquivo novo criado ali herde o grupo
@@ -96,7 +111,8 @@ visudo -c
 
 Autoriza exatamente 5 comandos: criar/remover usuário de hospedagem
 (via os scripts em `scripts/`), testar config do nginx e recarregar
-nginx/php-fpm. Nada além disso.
+nginx/php-fpm-hosting. Nada além disso — repare que não autoriza
+recarregar o `php-fpm.service` do Painel/Agent, só o `php-fpm-hosting`.
 
 ## 9. Fila assíncrona (systemd)
 

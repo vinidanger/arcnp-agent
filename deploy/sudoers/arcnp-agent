@@ -14,4 +14,4 @@ arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/create-hosting-user.sh 
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/delete-hosting-user.sh *
 arcnpagent ALL=(root) NOPASSWD: /usr/sbin/nginx -t
 arcnpagent ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx
-arcnpagent ALL=(root) NOPASSWD: /usr/bin/systemctl reload php-fpm
+arcnpagent ALL=(root) NOPASSWD: /usr/bin/systemctl reload php-fpm-hosting
