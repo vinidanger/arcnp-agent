@@ -9,6 +9,7 @@ use App\Support\DomainName;
 use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
 use App\Support\PhpFpmPool;
+use App\Support\PhpVersion;
 use App\Support\Subdirectory;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
@@ -36,6 +37,8 @@ class CreateAddonDomainAction implements AgentAction
         $username = LinuxUsername::validate($payload['username'] ?? '');
         $domain = DomainName::validate($payload['domain'] ?? '');
         $subdir = Subdirectory::validate($payload['subdir'] ?? '');
+        $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
+        PhpVersion::config($phpVersion);
 
         $configPath = NginxVhost::configPath($domain);
 
@@ -50,7 +53,7 @@ class CreateAddonDomainAction implements AgentAction
         $contents = $this->templateRenderer->render('nginx-vhost', [
             'domain' => $domain,
             'document_root' => $documentRoot,
-            'php_fpm_socket' => PhpFpmPool::socketPath($username),
+            'php_fpm_socket' => PhpFpmPool::socketPath($username, $phpVersion),
         ]);
 
         File::put($configPath, $contents);

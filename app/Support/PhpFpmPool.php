@@ -4,13 +4,13 @@ namespace App\Support;
 
 class PhpFpmPool
 {
-    public static function socketPath(string $username): string
+    public static function socketPath(string $username, string $phpVersion): string
     {
-        return config('provisioning.php_fpm_socket_dir')."/{$username}.sock";
+        return PhpVersion::config($phpVersion)['socket_dir']."/{$username}.sock";
     }
 
-    public static function poolConfigPath(string $username): string
+    public static function poolConfigPath(string $username, string $phpVersion): string
     {
-        return config('provisioning.php_fpm_pool_dir')."/{$username}.conf";
+        return PhpVersion::config($phpVersion)['pool_dir']."/{$username}.conf";
     }
 }

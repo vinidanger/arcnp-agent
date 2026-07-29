@@ -2,6 +2,7 @@
 
 namespace App\Services\System;
 
+use App\Support\PhpVersion;
 use Illuminate\Support\Facades\Process;
 use RuntimeException;
 
@@ -41,14 +42,14 @@ class ProcessRunner
     }
 
     /**
-     * Recarrega SÓ o php-fpm-hosting.service (pools de contas de
-     * hospedagem) — nunca o php-fpm.service do Painel/Agent, que
-     * ficaria momentaneamente indisponível a cada conta criada/removida
-     * se compartilhassem o mesmo serviço.
+     * Recarrega o php-fpm.service dessa versão específica — cada versão
+     * é isolada num serviço próprio (ver config/provisioning.php), então
+     * reload de um pool nunca afeta contas de outra versão nem o
+     * Painel/Agent.
      */
-    public function reloadPhpFpm(): void
+    public function reloadPhpFpm(string $phpVersion): void
     {
-        $this->exec(['sudo', '-n', '/usr/bin/systemctl', 'reload', config('provisioning.php_fpm_service')]);
+        $this->exec(['sudo', '-n', '/usr/bin/systemctl', 'reload', PhpVersion::config($phpVersion)['service']]);
     }
 
     public function userExists(string $username): bool

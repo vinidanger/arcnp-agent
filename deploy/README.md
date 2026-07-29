@@ -183,3 +183,58 @@ configuração extra.
 Sem passo extra de instalação — reaproveitam o mesmo usuário Linux,
 pool PHP-FPM e ACL da conta principal (só ganham um subdiretório
 dedicado dentro de `public_html` e seu próprio vhost).
+
+## 14. Múltiplas versões de PHP (8.1 / 8.2 / 8.4)
+
+O 8.3 já é a versão padrão do sistema (`php-fpm-hosting.service`,
+seção 6). As demais vêm do Remi como pacotes paralelos — cada uma
+isolada no próprio `systemd service`, exatamente pelo mesmo motivo do
+8.3 estar separado do Painel/Agent: reload de pool de uma versão nunca
+pode afetar contas de outra.
+
+```
+dnf install -y dnf-plugins-core
+
+for v in 81 82 84; do
+  dnf config-manager --set-enabled remi-php$v
+  dnf install -y php$v php$v-php-fpm php$v-php-common php$v-php-mysqlnd \
+    php$v-php-xml php$v-php-mbstring php$v-php-curl php$v-php-zip \
+    php$v-php-bcmath php$v-php-gd php$v-php-intl php$v-php-opcache
+done
+```
+
+Cada versão vem com um pool padrão ("www") que não usamos — mesmo
+problema do "serviço recusa subir sem nenhum pool" que resolvemos na
+seção 6, então cada uma ganha um placeholder também:
+
+```
+mkdir -p /var/log/php-fpm
+
+for v in 81 82 84; do
+  rm -f /etc/opt/remi/php$v/php-fpm.d/www.conf
+
+  cat > /etc/opt/remi/php$v/php-fpm.d/_placeholder.conf << EOF
+[placeholder]
+user = arcnpagent
+group = arcnpagent
+listen = /run/php$v-fpm/_placeholder.sock
+pm = ondemand
+pm.max_children = 1
+EOF
+
+  mkdir -p /run/php$v-fpm
+  chown arcnpagent:arcnpagent /run/php$v-fpm
+
+  chgrp arcnpagent /etc/opt/remi/php$v/php-fpm.d
+  chmod 2775 /etc/opt/remi/php$v/php-fpm.d
+
+  systemctl enable --now php$v-php-fpm
+  systemctl status php$v-php-fpm --no-pager
+done
+```
+
+Se o `/run/php$v-fpm` não sobreviver a um reboot (diretórios em `/run`
+são tmpfs, recriados vazios), considere adicionar
+`RuntimeDirectory=php$v-fpm` ao unit file de cada serviço via
+`systemctl edit php$v-php-fpm` — mesma lógica do
+`deploy/systemd/php-fpm-hosting.service`.

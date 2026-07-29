@@ -2,20 +2,44 @@
 
 return [
     /*
-     * Layout de diretórios/sockets usado pelas Actions de provisionamento.
+     * Layout de diretórios usado pelas Actions de provisionamento.
      * Convenção RHEL-family (AlmaLinux/Rocky) — ver deploy/README.md.
-     *
-     * Pools de contas de hospedagem ficam num php-fpm.service SEPARADO
-     * do Painel/Agent (php-fpm-hosting.service) — reload de pool de
-     * cliente nunca deve derrubar/reiniciar o Painel ou o próprio Agent,
-     * já que eles rodam no mesmo host.
      */
     'home_base_dir' => '/home',
     'nginx_conf_dir' => '/etc/nginx/conf.d',
-    'php_fpm_pool_dir' => '/etc/php-fpm-hosting.d',
-    'php_fpm_socket_dir' => '/run/php-fpm-hosting',
-    'php_fpm_service' => 'php-fpm-hosting',
     'default_php_version' => env('AGENT_DEFAULT_PHP_VERSION', '8.3'),
+
+    /*
+     * Cada versão de PHP roda como um php-fpm.service SEPARADO — mesmo
+     * motivo do 8.3 já ser isolado do Painel/Agent (php-fpm-hosting):
+     * reload de pool de uma conta nunca pode afetar contas de OUTRAS
+     * versões, e trocar/criar pool de uma versão não reinicia as demais.
+     * 8.1/8.2/8.4 vêm do Remi como Software Collections (SCL), instalados
+     * lado a lado do PHP padrão do sistema — cada um já traz seu próprio
+     * systemd service e diretório de pool prontos, só reaproveitamos.
+     */
+    'php_versions' => [
+        '8.1' => [
+            'pool_dir' => '/etc/opt/remi/php81/php-fpm.d',
+            'socket_dir' => '/run/php81-fpm',
+            'service' => 'php81-php-fpm',
+        ],
+        '8.2' => [
+            'pool_dir' => '/etc/opt/remi/php82/php-fpm.d',
+            'socket_dir' => '/run/php82-fpm',
+            'service' => 'php82-php-fpm',
+        ],
+        '8.3' => [
+            'pool_dir' => '/etc/php-fpm-hosting.d',
+            'socket_dir' => '/run/php-fpm-hosting',
+            'service' => 'php-fpm-hosting',
+        ],
+        '8.4' => [
+            'pool_dir' => '/etc/opt/remi/php84/php-fpm.d',
+            'socket_dir' => '/run/php84-fpm',
+            'service' => 'php84-php-fpm',
+        ],
+    ],
 
     /*
      * E-mail usado no registro da conta Let's Encrypt (avisos de

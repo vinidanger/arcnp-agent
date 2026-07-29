@@ -9,6 +9,8 @@ use App\Support\DomainName;
 use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
 use App\Support\PhpFpmPool;
+use App\Support\PhpVersion;
+use App\Support\Subdirectory;
 use Illuminate\Support\Facades\File;
 
 /**
@@ -38,9 +40,12 @@ class IssueSslCertificateAction implements AgentAction
     {
         $username = LinuxUsername::validate($payload['username'] ?? '');
         $domain = DomainName::validate($payload['domain'] ?? '');
+        $subdir = blank($payload['subdir'] ?? null) ? null : Subdirectory::validate($payload['subdir']);
+        $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
+        PhpVersion::config($phpVersion);
 
         $homeDir = config('provisioning.home_base_dir')."/{$username}";
-        $documentRoot = "{$homeDir}/public_html";
+        $documentRoot = $subdir ? "{$homeDir}/public_html/{$subdir}" : "{$homeDir}/public_html";
 
         $this->processRunner->issueSslCertificate($domain, $documentRoot);
 
@@ -50,7 +55,7 @@ class IssueSslCertificateAction implements AgentAction
         $contents = $this->templateRenderer->render('nginx-vhost-ssl', [
             'domain' => $domain,
             'document_root' => $documentRoot,
-            'php_fpm_socket' => PhpFpmPool::socketPath($username),
+            'php_fpm_socket' => PhpFpmPool::socketPath($username, $phpVersion),
             'ssl_cert_path' => $certPath,
             'ssl_cert_key_path' => $keyPath,
         ]);
