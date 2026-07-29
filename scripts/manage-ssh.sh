@@ -1,15 +1,18 @@
 #!/bin/bash
-# Uso: manage-ssh.sh <username> <set-shell|sync-keys> [enabled|disabled]
+# Uso: manage-ssh.sh <username> <set-shell|sync-keys|set-password> [enabled|disabled]
 #
 # set-shell troca o shell de login entre /bin/bash (acesso liberado) e
-# /sbin/nologin (padrão, sem shell) — autenticação continua sempre só
-# por chave pública (PasswordAuthentication já é "no" globalmente no
-# sshd_config, não muda por conta).
+# /sbin/nologin (padrão, sem shell).
 #
 # sync-keys lê pelo STDIN o conteúdo completo já validado (uma chave
 # pública por linha, a Action em PHP já validou o formato) e regrava
 # ~/.ssh/authorized_keys por inteiro — mesmo padrão idempotente das
 # outras sincronizações (cron, backup).
+#
+# set-password lê a senha nova pelo STDIN (nunca argv — apareceria em
+# `ps`) e troca via chpasswd. Login por senha E por chave convivem
+# (decisão explícita do produto — PasswordAuthentication precisa estar
+# "yes" no sshd_config pra isso funcionar, ver deploy/README.md).
 set -euo pipefail
 
 USERNAME="${1:-}"
@@ -51,6 +54,11 @@ case "$OPERATION" in
         chown -R "$USERNAME:$USERNAME" "$SSH_DIR"
         chmod 700 "$SSH_DIR"
         chmod 600 "$SSH_DIR/authorized_keys"
+        ;;
+    set-password)
+        PASSWORD=$(cat)
+        [[ -z "$PASSWORD" ]] && { echo "Senha vazia" >&2; exit 1; }
+        echo "$USERNAME:$PASSWORD" | chpasswd
         ;;
     *)
         echo "Operação desconhecida: $OPERATION" >&2

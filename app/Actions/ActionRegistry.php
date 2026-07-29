@@ -25,6 +25,7 @@ use App\Actions\Php\CreatePhpFpmPoolAction;
 use App\Actions\Php\DeletePhpFpmPoolAction;
 use App\Actions\Php\SwitchPhpVersionAction;
 use App\Actions\Ssh\SetSshAccessAction;
+use App\Actions\Ssh\SetSshPasswordAction;
 use App\Actions\Ssh\SyncSshKeysAction;
 use App\Actions\Ssl\IssueSslCertificateAction;
 use App\Actions\Web\CreateAddonDomainAction;
@@ -71,6 +72,7 @@ class ActionRegistry
         'cron.sync' => SyncCronJobsAction::class,
         'ssh.set_enabled' => SetSshAccessAction::class,
         'ssh.sync_keys' => SyncSshKeysAction::class,
+        'ssh.set_password' => SetSshPasswordAction::class,
     ];
 
     public static function resolve(string $action): AgentAction

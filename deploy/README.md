@@ -421,9 +421,11 @@ automaticamente, não precisa reiniciar nada. Ao excluir uma conta,
 ## 20. Acesso SSH por conta
 
 Shell completo (`/bin/bash`), nunca chroot — libera/revoga trocando o
-shell de login entre `/bin/bash` e `/sbin/nologin` (padrão). Chaves
-públicas ficam em `~/.ssh/authorized_keys`, reescrito por inteiro a
-cada sincronização (mesmo padrão do cron).
+shell de login entre `/bin/bash` e `/sbin/nologin` (padrão). Login por
+senha E por chave convivem (decisão do produto): chaves públicas ficam
+em `~/.ssh/authorized_keys` (reescrito por inteiro a cada
+sincronização, mesmo padrão do cron); senha é uma senha Unix normal da
+conta, trocada via `chpasswd`.
 
 ```
 chmod +x scripts/manage-ssh.sh
@@ -432,22 +434,25 @@ visudo -c
 ```
 
 **Pré-requisito obrigatório, não pular**: autenticação por senha
-precisa estar desligada globalmente no SSH do servidor — sem isso,
-uma conta com shell liberado mas SENHA fraca vira porta de entrada,
-já que a autenticação por chave deste recurso não substitui uma
-`PasswordAuthentication` ainda ligada por fora dele:
+precisa estar LIGADA no SSH do servidor pra login por senha funcionar
+(o padrão do OpenSSH já costuma vir assim, mas confirma):
 
 ```
 grep -i '^PasswordAuthentication' /etc/ssh/sshd_config
 ```
 
-Se não mostrar `PasswordAuthentication no` (ou mostrar `yes`/nada):
+Se mostrar `PasswordAuthentication no`:
 
 ```
-sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
 systemctl restart sshd
 ```
 
 (Confirma antes que você já tem acesso por chave configurado pro
-próprio usuário `root`/admin — reiniciar o sshd com isso errado te
+próprio usuário `root`/admin — reiniciar o sshd com config quebrada te
 tranca fora do servidor.)
+
+Login por senha é inerentemente mais fraco que só chave (força bruta é
+possível) — considerar `fail2ban` monitorando o `sshd` pra mitigar,
+mesma recomendação que qualquer painel com essa opção (cPanel,
+DirectAdmin) já dá.

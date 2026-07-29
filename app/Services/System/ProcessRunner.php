@@ -133,13 +133,26 @@ class ProcessRunner
     }
 
     /**
-     * Troca o shell de login entre /bin/bash e /sbin/nologin —
-     * autenticação continua sempre só por chave (PasswordAuthentication
-     * é "no" globalmente no sshd_config, não é por conta).
+     * Troca o shell de login entre /bin/bash e /sbin/nologin. Login
+     * por senha e por chave convivem (ver set-password) — precisa de
+     * PasswordAuthentication yes no sshd_config, ver deploy/README.md.
      */
     public function setSshAccess(string $username, bool $enabled): void
     {
         $this->exec(['sudo', '-n', base_path('scripts/manage-ssh.sh'), $username, 'set-shell', $enabled ? 'enabled' : 'disabled']);
+    }
+
+    public function setSshPassword(string $username, string $password): void
+    {
+        $result = Process::timeout(30)->input($password)->run([
+            'sudo', '-n', base_path('scripts/manage-ssh.sh'), $username, 'set-password',
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException(
+                'Troca de senha SSH falhou: '.trim($result->errorOutput() ?: $result->output())
+            );
+        }
     }
 
     /**
