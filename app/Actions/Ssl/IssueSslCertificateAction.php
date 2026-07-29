@@ -5,6 +5,7 @@ namespace App\Actions\Ssl;
 use App\Actions\Contracts\AgentAction;
 use App\Services\System\ProcessRunner;
 use App\Services\System\TemplateRenderer;
+use App\Support\DocumentRoot;
 use App\Support\DomainName;
 use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
@@ -41,11 +42,12 @@ class IssueSslCertificateAction implements AgentAction
         $username = LinuxUsername::validate($payload['username'] ?? '');
         $domain = DomainName::validate($payload['domain'] ?? '');
         $subdir = blank($payload['subdir'] ?? null) ? null : Subdirectory::validate($payload['subdir']);
+        $location = ($payload['location'] ?? null) === 'outside' ? 'outside' : null;
         $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
         PhpVersion::config($phpVersion);
 
         $homeDir = config('provisioning.home_base_dir')."/{$username}";
-        $documentRoot = $subdir ? "{$homeDir}/public_html/{$subdir}" : "{$homeDir}/public_html";
+        $documentRoot = DocumentRoot::resolve($homeDir, $domain, $location, $subdir);
 
         $this->processRunner->issueSslCertificate($domain, $documentRoot);
 

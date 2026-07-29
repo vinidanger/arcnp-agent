@@ -57,14 +57,18 @@ class ProcessRunner
         return Process::run(['id', '-u', $username])->successful();
     }
 
-    public function createAddonDirectory(string $username, string $subdir): void
+    /**
+     * $target é o subdiretório (location=inside) ou o domínio inteiro
+     * (location=outside, cria domains/{target}/public_html).
+     */
+    public function createAddonDirectory(string $username, string $location, string $target): void
     {
-        $this->exec(['sudo', '-n', base_path('scripts/create-addon-directory.sh'), $username, $subdir]);
+        $this->exec(['sudo', '-n', base_path('scripts/create-addon-directory.sh'), $username, $location, $target]);
     }
 
-    public function deleteAddonDirectory(string $username, string $subdir): void
+    public function deleteAddonDirectory(string $username, string $location, string $target): void
     {
-        $this->exec(['sudo', '-n', base_path('scripts/delete-addon-directory.sh'), $username, $subdir]);
+        $this->exec(['sudo', '-n', base_path('scripts/delete-addon-directory.sh'), $username, $location, $target]);
     }
 
     /**
@@ -207,15 +211,16 @@ class ProcessRunner
     }
 
     /**
-     * Único ponto que muta arquivos dentro de public_html (criar,
+     * Único ponto que muta arquivos dentro da raiz escolhida (criar,
      * salvar, apagar, renomear) — listar/ler não passam por aqui, o
-     * Agent já tem ACL de leitura direto (ver FileManagerPath). $content
-     * vai pro STDIN do script (nunca argv — arquivo pode ser grande e
-     * argv tem limite de tamanho do SO).
+     * Agent já tem ACL de leitura direto (ver FileManagerPath). $root
+     * vazio/null = public_html; senão é um domínio com árvore própria
+     * fora dela. $content vai pro STDIN do script (nunca argv — arquivo
+     * pode ser grande e argv tem limite de tamanho do SO).
      */
-    public function manageFile(string $username, string $operation, string $path, ?string $path2 = null, ?string $content = null): void
+    public function manageFile(string $username, string $operation, string $path, ?string $path2 = null, ?string $content = null, ?string $root = null): void
     {
-        $command = ['sudo', '-n', base_path('scripts/manage-file.sh'), $username, $operation, $path];
+        $command = ['sudo', '-n', base_path('scripts/manage-file.sh'), $username, (string) $root, $operation, $path];
 
         if ($path2 !== null) {
             $command[] = $path2;

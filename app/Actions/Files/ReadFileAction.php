@@ -26,8 +26,9 @@ class ReadFileAction implements AgentAction
     {
         $username = LinuxUsername::validate($payload['username'] ?? '');
         $path = (string) ($payload['path'] ?? '');
+        $root = blank($payload['root'] ?? null) ? null : $payload['root'];
 
-        $file = FileManagerPath::resolveExisting($username, $path);
+        $file = FileManagerPath::resolveExisting($username, $path, $root);
 
         if (! is_file($file)) {
             throw new InvalidArgumentException('Não é um arquivo.');

@@ -22,12 +22,13 @@ class CreateDirectoryAction implements AgentAction
     {
         $username = LinuxUsername::validate($payload['username'] ?? '');
         $path = (string) ($payload['path'] ?? '');
+        $root = blank($payload['root'] ?? null) ? null : $payload['root'];
 
         if ($path === '') {
             throw new RuntimeException('path é obrigatório.');
         }
 
-        $this->processRunner->manageFile($username, 'mkdir', $path);
+        $this->processRunner->manageFile($username, 'mkdir', $path, root: $root);
 
         return ['path' => $path];
     }

@@ -23,12 +23,13 @@ class RenameFileAction implements AgentAction
         $username = LinuxUsername::validate($payload['username'] ?? '');
         $from = (string) ($payload['from'] ?? '');
         $to = (string) ($payload['to'] ?? '');
+        $root = blank($payload['root'] ?? null) ? null : $payload['root'];
 
         if ($from === '' || $to === '') {
             throw new RuntimeException('from e to são obrigatórios.');
         }
 
-        $this->processRunner->manageFile($username, 'rename', $from, $to);
+        $this->processRunner->manageFile($username, 'rename', $from, $to, root: $root);
 
         return ['from' => $from, 'to' => $to];
     }

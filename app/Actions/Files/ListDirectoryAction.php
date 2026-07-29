@@ -23,8 +23,9 @@ class ListDirectoryAction implements AgentAction
     {
         $username = LinuxUsername::validate($payload['username'] ?? '');
         $path = (string) ($payload['path'] ?? '');
+        $root = blank($payload['root'] ?? null) ? null : $payload['root'];
 
-        $dir = FileManagerPath::resolveExisting($username, $path);
+        $dir = FileManagerPath::resolveExisting($username, $path, $root);
 
         if (! is_dir($dir)) {
             throw new InvalidArgumentException('Não é um diretório.');

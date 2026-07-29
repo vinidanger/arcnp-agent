@@ -1,12 +1,17 @@
 #!/bin/bash
-# Uso: manage-file.sh <username> <write|mkdir|touch|delete|rename> <path> [path_2]
+# Uso: manage-file.sh <username> <root> <write|mkdir|touch|delete|rename> <path> [path_2]
 #
-# Único ponto que MUTA arquivos dentro de public_html — listar/ler não
-# passam por aqui (o Agent já tem ACL de leitura, ver create-hosting-user.sh).
-# Roda como root (sudoers) porque o Agent (arcnpagent) só tem leitura;
-# criar/escrever exige poder ajustar a posse de volta pro dono da conta
-# depois. "write" lê o conteúdo novo do STDIN, nunca de argv (arquivo
-# pode ser grande, e argv tem limite de tamanho do SO).
+# root vazio = public_html (padrão); senão é um domínio com árvore
+# própria fora de public_html (domains/{root}/public_html — ver
+# location=outside_public_html).
+#
+# Único ponto que MUTA arquivos dentro da raiz escolhida — listar/ler
+# não passam por aqui (o Agent já tem ACL de leitura, ver
+# create-hosting-user.sh / create-addon-directory.sh). Roda como root
+# (sudoers) porque o Agent (arcnpagent) só tem leitura; criar/escrever
+# exige poder ajustar a posse de volta pro dono da conta depois. "write"
+# lê o conteúdo novo do STDIN, nunca de argv (arquivo pode ser grande,
+# e argv tem limite de tamanho do SO).
 #
 # Por simplicidade (e porque a UI sempre opera dentro da pasta que já
 # está navegando), NÃO cria diretórios intermediários — o diretório pai
@@ -14,19 +19,30 @@
 set -euo pipefail
 
 USERNAME="${1:-}"
-OPERATION="${2:-}"
-REL_PATH="${3:-}"
-REL_PATH_2="${4:-}"
+ROOT="${2:-}"
+OPERATION="${3:-}"
+REL_PATH="${4:-}"
+REL_PATH_2="${5:-}"
 
 if [[ ! "$USERNAME" =~ ^[a-z][a-z0-9]{2,31}$ ]]; then
     echo "Username inválido: $USERNAME" >&2
     exit 1
 fi
 
-BASE="/home/$USERNAME/public_html"
+HOME_DIR="/home/$USERNAME"
+
+if [[ -z "$ROOT" ]]; then
+    BASE="$HOME_DIR/public_html"
+else
+    if [[ ! "$ROOT" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
+        echo "Raiz inválida: $ROOT" >&2
+        exit 1
+    fi
+    BASE="$HOME_DIR/domains/$ROOT/public_html"
+fi
 
 if [[ ! -d "$BASE" ]]; then
-    echo "public_html não existe: $BASE" >&2
+    echo "Raiz não existe: $BASE" >&2
     exit 1
 fi
 
@@ -45,7 +61,7 @@ resolve() {
     real=$(realpath -m "$BASE_REAL/$rel")
 
     if [[ "$real" != "$BASE_REAL" && "$real" != "$BASE_REAL"/* ]]; then
-        echo "Caminho fora de public_html: $rel" >&2
+        echo "Caminho fora da raiz: $rel" >&2
         exit 1
     fi
 
@@ -80,7 +96,7 @@ case "$OPERATION" in
     delete)
         [[ -z "$REL_PATH" ]] && { echo "Caminho obrigatório" >&2; exit 1; }
         TARGET=$(resolve "$REL_PATH")
-        [[ "$TARGET" == "$BASE_REAL" ]] && { echo "Não pode remover a raiz do public_html" >&2; exit 1; }
+        [[ "$TARGET" == "$BASE_REAL" ]] && { echo "Não pode remover a raiz" >&2; exit 1; }
         [[ ! -e "$TARGET" ]] && { echo "Não encontrado: $REL_PATH" >&2; exit 1; }
         rm -rf "$TARGET"
         ;;

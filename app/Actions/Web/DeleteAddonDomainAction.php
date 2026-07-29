@@ -25,7 +25,8 @@ class DeleteAddonDomainAction implements AgentAction
     {
         $username = LinuxUsername::validate($payload['username'] ?? '');
         $domain = DomainName::validate($payload['domain'] ?? '');
-        $subdir = Subdirectory::validate($payload['subdir'] ?? '');
+        $location = ($payload['location'] ?? 'inside') === 'outside' ? 'outside' : 'inside';
+        $target = $location === 'outside' ? $domain : Subdirectory::validate($payload['subdir'] ?? '');
 
         $configPath = NginxVhost::configPath($domain);
 
@@ -34,7 +35,7 @@ class DeleteAddonDomainAction implements AgentAction
             $this->processRunner->reloadNginx();
         }
 
-        $this->processRunner->deleteAddonDirectory($username, $subdir);
+        $this->processRunner->deleteAddonDirectory($username, $location, $target);
 
         return ['domain' => $domain, 'deleted' => true];
     }

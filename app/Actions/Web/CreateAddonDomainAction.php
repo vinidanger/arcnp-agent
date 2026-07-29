@@ -5,6 +5,7 @@ namespace App\Actions\Web;
 use App\Actions\Contracts\AgentAction;
 use App\Services\System\ProcessRunner;
 use App\Services\System\TemplateRenderer;
+use App\Support\DocumentRoot;
 use App\Support\DomainName;
 use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
@@ -15,9 +16,11 @@ use Illuminate\Support\Facades\File;
 use RuntimeException;
 
 /**
- * Domínio adicional/subdomínio — usa o mesmo usuário Linux e o mesmo
- * pool PHP-FPM da conta principal, só ganha um subdiretório dedicado
- * dentro de public_html e seu próprio vhost.
+ * Domínio adicional/subdomínio — sempre usa o mesmo usuário Linux e o
+ * mesmo pool PHP-FPM da conta principal. O document root muda conforme
+ * location: "inside" fica num subdiretório dentro de public_html
+ * (padrão histórico); "outside" ganha uma árvore própria em
+ * domains/{domain}/public_html (mesma convenção do DirectAdmin).
  */
 class CreateAddonDomainAction implements AgentAction
 {
@@ -36,7 +39,7 @@ class CreateAddonDomainAction implements AgentAction
     {
         $username = LinuxUsername::validate($payload['username'] ?? '');
         $domain = DomainName::validate($payload['domain'] ?? '');
-        $subdir = Subdirectory::validate($payload['subdir'] ?? '');
+        $location = ($payload['location'] ?? 'inside') === 'outside' ? 'outside' : 'inside';
         $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
         PhpVersion::config($phpVersion);
 
@@ -46,9 +49,12 @@ class CreateAddonDomainAction implements AgentAction
             throw new RuntimeException("Vhost já existe para: {$domain}");
         }
 
-        $this->processRunner->createAddonDirectory($username, $subdir);
+        $homeDir = config('provisioning.home_base_dir')."/{$username}";
+        $subdir = $location === 'outside' ? null : Subdirectory::validate($payload['subdir'] ?? '');
+        $target = $location === 'outside' ? $domain : $subdir;
+        $documentRoot = DocumentRoot::resolve($homeDir, $domain, $location, $subdir);
 
-        $documentRoot = config('provisioning.home_base_dir')."/{$username}/public_html/{$subdir}";
+        $this->processRunner->createAddonDirectory($username, $location, $target);
 
         $contents = $this->templateRenderer->render('nginx-vhost', [
             'domain' => $domain,
@@ -63,7 +69,7 @@ class CreateAddonDomainAction implements AgentAction
             $this->processRunner->reloadNginx();
         } catch (\Throwable $e) {
             File::delete($configPath);
-            $this->processRunner->deleteAddonDirectory($username, $subdir);
+            $this->processRunner->deleteAddonDirectory($username, $location, $target);
             throw $e;
         }
 

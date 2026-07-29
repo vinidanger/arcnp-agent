@@ -5,21 +5,30 @@ namespace App\Support;
 use InvalidArgumentException;
 
 /**
- * O gerenciador de arquivos fica restrito a public_html — nunca o home
- * inteiro (evita expor backups/, logs/ etc. a navegação/exclusão por
- * engano). Toda resolução passa por realpath() e confere que o
- * resultado continua DENTRO da base, contra symlink e ../ escape —
- * a validação de string sozinha (bloquear "..") não basta porque um
- * symlink dentro de public_html poderia apontar pra fora.
+ * O gerenciador de arquivos fica restrito a UMA raiz por vez — nunca o
+ * home inteiro (evita expor backups/, logs/ etc. a navegação/exclusão
+ * por engano). Raiz padrão é public_html; $root (quando informado) é
+ * um domínio com árvore própria fora de public_html
+ * (domains/{root}/public_html — ver location=outside_public_html).
+ * Toda resolução passa por realpath() e confere que o resultado
+ * continua DENTRO da base, contra symlink e ../ escape — a validação
+ * de string sozinha (bloquear "..") não basta porque um symlink dentro
+ * da raiz poderia apontar pra fora.
  */
 class FileManagerPath
 {
-    public static function baseDir(string $username): string
+    public static function baseDir(string $username, ?string $root = null): string
     {
-        $base = realpath(config('provisioning.home_base_dir')."/{$username}/public_html");
+        $home = config('provisioning.home_base_dir')."/{$username}";
+
+        $candidate = blank($root)
+            ? "{$home}/public_html"
+            : "{$home}/domains/".DomainName::validate($root).'/public_html';
+
+        $base = realpath($candidate);
 
         if ($base === false) {
-            throw new InvalidArgumentException('Diretório public_html não encontrado.');
+            throw new InvalidArgumentException('Diretório não encontrado.');
         }
 
         return $base;
@@ -29,9 +38,9 @@ class FileManagerPath
      * Pra caminhos que já existem (listar, ler, apagar, origem de
      * rename) — realpath resolve o caminho real (inclusive symlinks).
      */
-    public static function resolveExisting(string $username, string $relativePath): string
+    public static function resolveExisting(string $username, string $relativePath, ?string $root = null): string
     {
-        $base = self::baseDir($username);
+        $base = self::baseDir($username, $root);
         $candidate = self::join($base, $relativePath);
 
         $real = realpath($candidate);
@@ -48,9 +57,9 @@ class FileManagerPath
      * de rename) — resolve o diretório PAI (que precisa existir) e
      * junta o nome do arquivo/pasta novo nele.
      */
-    public static function resolveForCreate(string $username, string $relativePath): string
+    public static function resolveForCreate(string $username, string $relativePath, ?string $root = null): string
     {
-        $base = self::baseDir($username);
+        $base = self::baseDir($username, $root);
         $candidate = self::join($base, $relativePath);
 
         $parentReal = realpath(dirname($candidate));

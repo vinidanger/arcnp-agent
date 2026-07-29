@@ -5,6 +5,7 @@ namespace App\Actions\Web;
 use App\Actions\Contracts\AgentAction;
 use App\Services\System\ProcessRunner;
 use App\Services\System\TemplateRenderer;
+use App\Support\DocumentRoot;
 use App\Support\DomainName;
 use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
@@ -38,12 +39,13 @@ class UpdateVirtualHostPhpVersionAction implements AgentAction
         $username = LinuxUsername::validate($payload['username'] ?? '');
         $domain = DomainName::validate($payload['domain'] ?? '');
         $subdir = blank($payload['subdir'] ?? null) ? null : Subdirectory::validate($payload['subdir']);
+        $location = ($payload['location'] ?? null) === 'outside' ? 'outside' : null;
         $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
         PhpVersion::config($phpVersion);
         $sslActive = (bool) ($payload['ssl_active'] ?? false);
 
         $homeDir = config('provisioning.home_base_dir')."/{$username}";
-        $documentRoot = $subdir ? "{$homeDir}/public_html/{$subdir}" : "{$homeDir}/public_html";
+        $documentRoot = DocumentRoot::resolve($homeDir, $domain, $location, $subdir);
         $socketPath = PhpFpmPool::socketPath($username, $phpVersion);
 
         if ($sslActive) {
