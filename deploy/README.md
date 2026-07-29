@@ -332,3 +332,29 @@ cat > /etc/cron.d/pma-sso-nonces << 'EOF'
 15 * * * * root find /var/lib/pma-sso/nonces -mmin +60 -delete
 EOF
 ```
+
+## 16. Backup
+
+Sem passo de instalação novo além de conferir que o cliente do MySQL
+está presente (o dump usa o binário `mysqldump`, não uma extensão PHP):
+
+```
+which mysqldump || dnf install -y mariadb
+```
+
+Reinstalar o sudoers depois do deploy (ganhou a linha do
+`create-backup.sh`, ver seção 8) e conferir permissão de execução:
+
+```
+chmod +x scripts/create-backup.sh
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+O dump roda sem privilégio (usuário `arcnpagent` já tem acesso total
+ao MySQL via a conexão `mysql_admin`, mesma credencial da seção 11) —
+só o `tar` do `public_html` e a movimentação dos dumps pra dentro do
+home do cliente exigem root, por isso passam pelo script sudo. Nada
+fica em `/opt/arcnp-agent/storage` depois de pronto: o diretório
+temporário de dump é apagado ao final de cada execução, sucesso ou
+falha.

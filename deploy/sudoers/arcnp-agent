@@ -17,6 +17,7 @@ arcnpagent ALL=(root) NOPASSWD: /usr/bin/systemctl reload php-fpm-hosting
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/issue-ssl-certificate.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/create-addon-directory.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/delete-addon-directory.sh *
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/create-backup.sh *
 
 # Uma linha por versão de PHP suportada (config/provisioning.php) — cada
 # uma isolada no próprio serviço, reload de uma nunca afeta as outras.

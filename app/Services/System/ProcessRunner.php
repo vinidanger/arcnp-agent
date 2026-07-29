@@ -80,6 +80,58 @@ class ProcessRunner
         ], 120);
     }
 
+    /**
+     * Dump sem privilégio (o próprio Agent já tem acesso de leitura ao
+     * MySQL via a conexão mysql_admin) — grava comprimido direto no
+     * destino. Senha via env MYSQL_PWD em vez de -p na linha de
+     * comando, pra não aparecer em `ps`. Buffer inteiro em memória
+     * antes de comprimir: aceitável pro tamanho de conta que esse
+     * painel atende; se algum dia isso virar gargalo, trocar por um
+     * pipe real mysqldump|gzip.
+     */
+    public function dumpMysqlDatabase(string $dbName, string $destinationPath): void
+    {
+        $config = config('database.connections.mysql_admin');
+
+        $result = Process::timeout(300)
+            ->env(['MYSQL_PWD' => $config['password']])
+            ->run([
+                'mysqldump',
+                '--user='.$config['username'],
+                '--host='.($config['host'] ?? '127.0.0.1'),
+                '--single-transaction',
+                '--quick',
+                $dbName,
+            ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('mysqldump falhou ('.$dbName.'): '.trim($result->errorOutput()));
+        }
+
+        file_put_contents($destinationPath, gzencode($result->output(), 6));
+    }
+
+    /**
+     * @param  list<string>  $databases
+     * @return list<array{filename: string, size: int}>
+     */
+    public function createBackup(string $username, int $retention, string $tmpDumpDir, array $databases): array
+    {
+        $result = Process::timeout(600)->run([
+            'sudo', '-n', base_path('scripts/create-backup.sh'),
+            $username, (string) $retention, $tmpDumpDir,
+            ...$databases,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException(
+                'Backup falhou: '.trim($result->errorOutput() ?: $result->output())
+            );
+        }
+
+        return json_decode($result->output(), true) ?? [];
+    }
+
     private function exec(array $command, int $timeout = 30): void
     {
         $result = Process::timeout($timeout)->run($command);

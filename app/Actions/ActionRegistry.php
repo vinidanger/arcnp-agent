@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Actions\Backup\CreateBackupAction;
 use App\Actions\Contracts\AgentAction;
 use App\Actions\Database\CreateMysqlDatabaseAction;
 use App\Actions\Database\DeleteMysqlDatabaseAction;
@@ -47,6 +48,7 @@ class ActionRegistry
         'web.delete_addon_domain' => DeleteAddonDomainAction::class,
         'php.switch_version' => SwitchPhpVersionAction::class,
         'web.update_vhost_php_version' => UpdateVirtualHostPhpVersionAction::class,
+        'backup.create' => CreateBackupAction::class,
     ];
 
     public static function resolve(string $action): AgentAction
