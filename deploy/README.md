@@ -27,6 +27,7 @@ Preencher no `.env`:
 - `AGENT_SERVER_ID` — o mesmo ID gerado pelo Painel no pareamento deste servidor
 - `AGENT_SHARED_SECRET` — segredo gerado pelo Painel no pareamento (nunca reaproveitar entre servidores)
 - `AGENT_PANEL_BASE_URL` — URL base do Painel (usada para montar as chamadas de callback e heartbeat)
+- `AGENT_MYSQL_ADMIN_USER` / `AGENT_MYSQL_ADMIN_PASSWORD` — credenciais do usuário MySQL dedicado do Agent (ver seção 11)
 
 ```
 php artisan migrate --force
@@ -134,8 +135,28 @@ Envia um snapshot (load average, % disco, % memória) a cada 60s. O
 Painel marca o servidor `offline` automaticamente se não receber
 heartbeat por tempo demais (ver `servers:mark-stale-offline` no Painel).
 
+## 11. Usuário MySQL administrativo do Agent
+
+O Agent precisa criar banco/usuário MySQL por conta de hospedagem, mas
+**nunca** recebe a senha real do `root` do MariaDB — só um usuário
+dedicado com privilégio de criar/remover banco e usuário, sem acesso
+de leitura/escrita a dados de bancos existentes (nem os do próprio
+Painel):
+
+```
+mysql -u root -p
+```
+
+```sql
+CREATE USER 'arcnpagent'@'localhost' IDENTIFIED BY 'SENHA_FORTE_AQUI';
+GRANT CREATE, DROP, CREATE USER, RELOAD ON *.* TO 'arcnpagent'@'localhost' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+```
+
+Preenche `AGENT_MYSQL_ADMIN_USER=arcnpagent` e
+`AGENT_MYSQL_ADMIN_PASSWORD=SENHA_FORTE_AQUI` no `.env` do Agent.
+
 ## Ainda não incluído
 
-- **Banco de dados, SSL, suspender/reativar conta, domínios adicionais**
-  — ficam para a Fase 6 (não faziam parte do escopo mínimo de "criar
-  conta de hospedagem": usuário Linux + vhost + pool PHP-FPM).
+- **SSL (Let's Encrypt) e domínios adicionais** — ficam para depois
+  (banco de dados e suspender/reativar conta já estão cobertos).

@@ -3,8 +3,12 @@
 namespace App\Actions;
 
 use App\Actions\Contracts\AgentAction;
+use App\Actions\Database\CreateMysqlDatabaseAction;
+use App\Actions\Database\DeleteMysqlDatabaseAction;
 use App\Actions\Demo\DemoAsyncAction;
 use App\Actions\Demo\HealthCheckAction;
+use App\Actions\Hosting\ReactivateHostingAccountAction;
+use App\Actions\Hosting\SuspendHostingAccountAction;
 use App\Actions\Linux\CreateSystemUserAction;
 use App\Actions\Linux\DeleteSystemUserAction;
 use App\Actions\Php\CreatePhpFpmPoolAction;
@@ -29,6 +33,10 @@ class ActionRegistry
         'web.delete_vhost' => DeleteVirtualHostAction::class,
         'php.create_pool' => CreatePhpFpmPoolAction::class,
         'php.delete_pool' => DeletePhpFpmPoolAction::class,
+        'database.create_mysql' => CreateMysqlDatabaseAction::class,
+        'database.delete_mysql' => DeleteMysqlDatabaseAction::class,
+        'hosting.suspend' => SuspendHostingAccountAction::class,
+        'hosting.reactivate' => ReactivateHostingAccountAction::class,
     ];
 
     public static function resolve(string $action): AgentAction

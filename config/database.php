@@ -84,6 +84,26 @@ return [
             ]) : [],
         ],
 
+        /*
+         * Conexão administrativa usada só pelas Actions de banco de dados
+         * (criar/remover banco e usuário de conta de hospedagem). Usuário
+         * dedicado com privilégio de CREATE/DROP/CREATE USER apenas —
+         * nunca a senha real do root do MariaDB (ver deploy/README.md).
+         */
+        'mysql_admin' => [
+            'driver' => 'mysql',
+            'host' => env('AGENT_MYSQL_ADMIN_HOST', '127.0.0.1'),
+            'port' => env('AGENT_MYSQL_ADMIN_PORT', '3306'),
+            'database' => '',
+            'username' => env('AGENT_MYSQL_ADMIN_USER'),
+            'password' => env('AGENT_MYSQL_ADMIN_PASSWORD'),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => true,
+            'engine' => null,
+        ],
+
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DB_URL'),
