@@ -388,3 +388,15 @@ done
 
 O gerenciador fica restrito a `public_html` — nunca o home inteiro
 (não expõe `backups/`, `logs/` etc. a navegação/exclusão por engano).
+
+## 18. Uso de disco (cota de plano)
+
+`du` no home inteiro (`public_html` + `backups/` + `logs/`) exige root
+— a ACL do Agent cobre só `public_html` e os arquivos de backup
+específicos, não o home todo. Só sudoers, sem instalação nova:
+
+```
+chmod +x scripts/disk-usage.sh
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```

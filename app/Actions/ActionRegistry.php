@@ -8,6 +8,7 @@ use App\Actions\Database\CreateMysqlDatabaseAction;
 use App\Actions\Database\DeleteMysqlDatabaseAction;
 use App\Actions\Demo\DemoAsyncAction;
 use App\Actions\Demo\HealthCheckAction;
+use App\Actions\Disk\DiskUsageAction;
 use App\Actions\Files\CreateDirectoryAction;
 use App\Actions\Files\CreateFileAction;
 use App\Actions\Files\DeleteFileAction;
@@ -63,6 +64,7 @@ class ActionRegistry
         'files.create_file' => CreateFileAction::class,
         'files.delete' => DeleteFileAction::class,
         'files.rename' => RenameFileAction::class,
+        'disk.usage' => DiskUsageAction::class,
     ];
 
     public static function resolve(string $action): AgentAction

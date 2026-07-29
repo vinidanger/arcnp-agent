@@ -132,6 +132,21 @@ class ProcessRunner
         return json_decode($result->output(), true) ?? [];
     }
 
+    public function diskUsageBytes(string $username): int
+    {
+        $result = Process::timeout(60)->run([
+            'sudo', '-n', base_path('scripts/disk-usage.sh'), $username,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException(
+                'Cálculo de uso de disco falhou: '.trim($result->errorOutput() ?: $result->output())
+            );
+        }
+
+        return (int) trim($result->output());
+    }
+
     /**
      * Único ponto que muta arquivos dentro de public_html (criar,
      * salvar, apagar, renomear) — listar/ler não passam por aqui, o
