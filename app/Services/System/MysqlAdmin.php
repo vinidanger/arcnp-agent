@@ -34,9 +34,13 @@ class MysqlAdmin
     {
         MysqlIdentifier::validate($username);
 
+        // CREATE USER é DDL — MySQL/MariaDB não aceita bind de parâmetro
+        // (?) nessa posição, só em DML. O escape correto aqui é via
+        // PDO::quote() do driver, não interpolação manual.
+        $quotedPassword = DB::connection('mysql_admin')->getPdo()->quote($password);
+
         DB::connection('mysql_admin')->statement(
-            "CREATE USER IF NOT EXISTS `{$username}`@'localhost' IDENTIFIED BY ?",
-            [$password]
+            "CREATE USER IF NOT EXISTS `{$username}`@'localhost' IDENTIFIED BY {$quotedPassword}"
         );
     }
 
