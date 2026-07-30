@@ -741,14 +741,18 @@ principais):
 
 ```php
 $config['db_dsnw'] = 'mysql://roundcube:GERAR_SENHA_FORTE@localhost/roundcube';
-$config['default_host'] = 'ssl://127.0.0.1';
-$config['default_port'] = 993;
-$config['smtp_server'] = 'tls://127.0.0.1';
-$config['smtp_port'] = 587;
+$config['imap_host'] = 'ssl://MAILHOST:993';
+$config['smtp_host'] = 'tls://MAILHOST:587';
 $config['smtp_user'] = '%u';
 $config['smtp_pass'] = '%p';
 $config['des_key'] = 'GERAR_STRING_ALEATORIA_DE_24_CARACTERES';
 ```
+
+Troque `MAILHOST` pelo hostname de e-mail real (ex: `smtp.arcn.cloud`) —
+**não use `127.0.0.1`**: o certificado TLS do Dovecot é emitido pro
+hostname, não pro IP, e a verificação de certificado do PHP rejeita a
+conexão silenciosamente se os dois não baterem (aparece só como "login
+falhou", sem pista nenhuma do motivo real).
 
 Rodar o instalador de schema do banco (só na primeira vez):
 
@@ -768,19 +772,44 @@ chmod 0400 /opt/roundcube/public_html/sso-secret.php
 Editar `sso-secret.php` — colar o MESMO valor de `AGENT_SHARED_SECRET`
 do `.env` deste Agent (`grep AGENT_SHARED_SECRET /opt/arcnp-agent/.env`).
 
+ACL pro nginx conseguir ler os arquivos estáticos (CSS/JS/imagem) —
+o PHP-FPM roda como usuário `roundcube` e lê os próprios arquivos sem
+problema, mas quem serve os arquivos estáticos é o nginx direto, com
+outro usuário, mesma lógica do `create-hosting-user.sh`:
+
+```
+setfacl -R -m u:nginx:rx /opt/roundcube/public_html
+setfacl -d -m u:nginx:rx /opt/roundcube/public_html
+setfacl -m u:nginx:x /opt/roundcube
+```
+
+Diretório de sessão PHP dedicado — sem isso a sessão pode cair no
+caminho padrão do sistema (fora do `open_basedir` da pool abaixo),
+perdendo o estado entre requisições e disparando erro de CSRF
+("Request check failed") a cada ação:
+
+```
+mkdir -p /var/lib/roundcube-sso/sessions
+chown roundcube:roundcube /var/lib/roundcube-sso/sessions
+```
+
 Pool PHP-FPM isolada e serviço:
 
 ```
 mkdir -p /etc/php-fpm-roundcube.d
 cp deploy/php-fpm/php-fpm-roundcube.conf /etc/php-fpm-roundcube.conf
 cp deploy/php-fpm/roundcube-pool.conf /etc/php-fpm-roundcube.d/roundcube.conf
+echo 'php_admin_value[session.save_path] = /var/lib/roundcube-sso/sessions' >> /etc/php-fpm-roundcube.d/roundcube.conf
 cp deploy/systemd/php-fpm-roundcube.service /etc/systemd/system/
 
 systemctl daemon-reload
 systemctl enable --now php-fpm-roundcube
 ```
 
-Nginx (porta própria 8445):
+Nginx (porta própria 8445 — a partir do Roundcube 1.6, CSS/JS/imagem
+não ficam dentro de `public_html`, são servidos através do
+`public_html/static.php`; o `deploy/nginx/roundcube.conf` já tem a
+location certa pra isso):
 
 ```
 cp deploy/nginx/roundcube.conf /etc/nginx/conf.d/roundcube.conf
