@@ -24,6 +24,9 @@ use App\Actions\Hosting\ReactivateHostingAccountAction;
 use App\Actions\Hosting\SuspendHostingAccountAction;
 use App\Actions\Linux\CreateSystemUserAction;
 use App\Actions\Linux\DeleteSystemUserAction;
+use App\Actions\Mail\DeleteMailDkimAction;
+use App\Actions\Mail\SyncMailDkimAction;
+use App\Actions\Mail\SyncMailStateAction;
 use App\Actions\Php\CreatePhpFpmPoolAction;
 use App\Actions\Php\DeletePhpFpmPoolAction;
 use App\Actions\Php\SwitchPhpVersionAction;
@@ -79,6 +82,9 @@ class ActionRegistry
         'dns.create_zone' => CreateDnsZoneAction::class,
         'dns.update_zone_records' => UpdateDnsZoneRecordsAction::class,
         'dns.delete_zone' => DeleteDnsZoneAction::class,
+        'mail.sync_state' => SyncMailStateAction::class,
+        'mail.sync_dkim' => SyncMailDkimAction::class,
+        'mail.delete_dkim' => DeleteMailDkimAction::class,
     ];
 
     public static function resolve(string $action): AgentAction

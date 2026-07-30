@@ -514,3 +514,286 @@ Essa é a integração mais sensível a infraestrutura real que já fizemos
 — não seria surpresa se `named-checkconf`/`named-checkzone` pegarem
 algo específico da distro na primeira zona de teste. Testar criando
 uma zona de teste antes de confiar em produção.
+
+## 22. E-mail (Postfix + Dovecot)
+
+Contas de e-mail são usuários VIRTUAIS do Postfix/Dovecot (não usuário
+Linux de verdade) — a caixa fica em Maildir dentro do próprio home da
+conta de hospedagem dona do domínio (`/home/{usuario}/mail/{domínio}/{caixa}/Maildir`),
+então o espaço já entra na mesma conta que o `disk.usage` (seção 18)
+mede — sem sistema de cota separado. O Painel manda o estado COMPLETO
+do servidor (todo domínio com e-mail ativo + toda caixa) a cada
+mudança; o Agent reescreve os 5 arquivos de mapeamento inteiros — mesmo
+padrão do cron/SSH/DNS.
+
+```
+dnf install -y postfix dovecot
+```
+
+Editar `/etc/postfix/main.cf` — adicionar (ou ajustar se já existirem)
+essas diretivas ao final do arquivo:
+
+```
+myhostname = mail.SEUDOMINIO.com
+smtpd_banner = $myhostname ESMTP
+
+virtual_mailbox_domains = hash:/etc/postfix/virtual_domains
+virtual_mailbox_maps = hash:/etc/postfix/virtual_mailbox_maps
+virtual_mailbox_base = /home
+virtual_uid_maps = hash:/etc/postfix/virtual_uid_maps
+virtual_gid_maps = hash:/etc/postfix/virtual_gid_maps
+virtual_minimum_uid = 1000
+virtual_transport = virtual
+
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+smtpd_sasl_auth_enable = yes
+smtpd_recipient_restrictions =
+    permit_sasl_authenticated,
+    permit_mynetworks,
+    reject_unauth_destination
+
+smtpd_tls_cert_file = /etc/letsencrypt/live/mail.SEUDOMINIO.com/fullchain.pem
+smtpd_tls_key_file = /etc/letsencrypt/live/mail.SEUDOMINIO.com/privkey.pem
+smtpd_tls_security_level = may
+smtp_tls_security_level = may
+smtpd_tls_auth_only = yes
+```
+
+Troque `mail.SEUDOMINIO.com` pelo hostname de e-mail que você vai
+cadastrar como `dns_ns1`-like no servidor (campo "Nameserver" já tem
+um equivalente — esse aqui é um campo novo, "Hostname de e-mail", ver
+seção do Painel). Certificado desse hostname: emitir manualmente uma
+vez por servidor (não é por conta de hospedagem, então não passa pela
+Action `ssl.issue_certificate`):
+
+```
+systemctl stop nginx
+certbot certonly --standalone -d mail.SEUDOMINIO.com --agree-tos -m SEU@EMAIL.com --no-eff-email
+systemctl start nginx
+```
+
+Habilitar submissão autenticada (porta 587) — no mesmo `main.cf`, ou
+editando `/etc/postfix/master.cf`, descomentar/adicionar:
+
+```
+submission inet n       -       n       -       -       smtpd
+  -o syslog_name=postfix/submission
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
+```
+
+Dovecot — `/etc/dovecot/dovecot.conf` (ou um arquivo em
+`/etc/dovecot/conf.d/`, como preferir organizar):
+
+```
+protocols = imap
+mail_location = maildir:~/Maildir
+
+ssl = required
+ssl_cert = </etc/letsencrypt/live/mail.SEUDOMINIO.com/fullchain.pem
+ssl_key = </etc/letsencrypt/live/mail.SEUDOMINIO.com/privkey.pem
+
+passdb {
+    driver = passwd-file
+    args = /etc/dovecot/users
+}
+userdb {
+    driver = passwd-file
+    args = /etc/dovecot/users
+}
+
+service auth {
+    unix_listener /var/spool/postfix/private/auth {
+        mode = 0660
+        user = postfix
+        group = postfix
+    }
+}
+```
+
+`/etc/dovecot/users` é criado vazio pelo primeiro `mail.sync_state` —
+só garanta que o diretório existe e o grupo `dovecot` também (o pacote
+já cria):
+
+```
+touch /etc/dovecot/users
+chown root:dovecot /etc/dovecot/users
+chmod 640 /etc/dovecot/users
+
+systemctl enable --now postfix dovecot
+```
+
+Firewall (portas públicas — clientes de e-mail do mundo inteiro
+precisam alcançar, diferente da 8443 privada do Agent):
+
+```
+firewall-cmd --permanent --add-port=25/tcp
+firewall-cmd --permanent --add-port=587/tcp
+firewall-cmd --permanent --add-port=143/tcp
+firewall-cmd --permanent --add-port=993/tcp
+firewall-cmd --reload
+```
+
+Sudoers (2 scripts novos):
+
+```
+chmod +x scripts/manage-mail.sh scripts/manage-mail-dkim.sh
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+## 23. DKIM (assinatura de e-mail, via OpenDKIM)
+
+```
+dnf install -y opendkim
+mkdir -p /etc/opendkim/keys
+chown -R opendkim:opendkim /etc/opendkim/keys
+touch /etc/opendkim/KeyTable /etc/opendkim/SigningTable
+chown root:opendkim /etc/opendkim/KeyTable /etc/opendkim/SigningTable
+```
+
+Editar `/etc/opendkim.conf` (os principais, o resto o pacote já traz
+com um padrão razoável):
+
+```
+Domain                  *
+KeyTable                /etc/opendkim/KeyTable
+SigningTable            refile:/etc/opendkim/SigningTable
+ExternalIgnoreList      refile:/etc/opendkim/TrustedHosts
+InternalHosts           refile:/etc/opendkim/TrustedHosts
+Socket                  local:/run/opendkim/opendkim.sock
+```
+
+```
+cat > /etc/opendkim/TrustedHosts << 'EOF'
+127.0.0.1
+localhost
+::1
+EOF
+
+mkdir -p /run/opendkim
+chown opendkim:opendkim /run/opendkim
+```
+
+Integrar no Postfix como milter — em `/etc/postfix/main.cf`:
+
+```
+milter_default_action = accept
+milter_protocol = 6
+smtpd_milters = local:/run/opendkim/opendkim.sock
+non_smtpd_milters = local:/run/opendkim/opendkim.sock
+```
+
+```
+systemctl enable --now opendkim
+systemctl restart postfix
+```
+
+Nada de SPF/DMARC aqui — são só registros TXT (sem serviço nenhum
+rodando), o Painel gera o conteúdo sugerido junto com o DKIM quando
+o e-mail é ativado num domínio.
+
+## 24. Webmail (Roundcube, acesso via SSO do Painel)
+
+Instância única por servidor, mesmo padrão do phpMyAdmin (seção 15):
+pool PHP-FPM isolada, vhost em porta própria, acesso normal via link
+de uso único do Painel — só que aqui não existe `auth_type=signon`
+nativo, então a ponte (`sso-login.php`) auto-submete o formulário de
+login padrão do Roundcube com usuário/senha da caixa já preenchidos,
+em vez de forjar sessão.
+
+```
+useradd --system --home-dir /opt/roundcube --shell /sbin/nologin roundcube
+mkdir -p /opt/roundcube /var/lib/roundcube-sso/nonces /var/log/php-fpm
+chown -R roundcube:roundcube /opt/roundcube /var/lib/roundcube-sso
+```
+
+Banco de dados próprio do Roundcube (preferências, catálogo de
+endereços — as mensagens em si continuam só no Maildir via IMAP, isso
+aqui é só metadado da aplicação):
+
+```sql
+CREATE DATABASE roundcube CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'roundcube'@'localhost' IDENTIFIED BY 'GERAR_SENHA_FORTE';
+GRANT ALL PRIVILEGES ON roundcube.* TO 'roundcube'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+Baixar o Roundcube direto do site oficial:
+
+```
+cd /tmp
+curl -LO https://github.com/roundcube/roundcubemail/releases/latest/download/roundcubemail-complete.tar.gz
+tar -xzf roundcubemail-complete.tar.gz
+rsync -a --delete roundcubemail-*/ /opt/roundcube/
+rm -rf roundcubemail-* roundcubemail-complete.tar.gz
+chown -R roundcube:roundcube /opt/roundcube
+```
+
+Configurar (`/opt/roundcube/config/config.inc.php`, editar os
+principais):
+
+```php
+$config['db_dsnw'] = 'mysql://roundcube:GERAR_SENHA_FORTE@localhost/roundcube';
+$config['default_host'] = 'ssl://127.0.0.1';
+$config['default_port'] = 993;
+$config['smtp_server'] = 'tls://127.0.0.1';
+$config['smtp_port'] = 587;
+$config['smtp_user'] = '%u';
+$config['smtp_pass'] = '%p';
+$config['des_key'] = 'GERAR_STRING_ALEATORIA_DE_24_CARACTERES';
+```
+
+Rodar o instalador de schema do banco (só na primeira vez):
+
+```
+mysql roundcube < /opt/roundcube/SQL/mysql.initial.sql
+```
+
+Script-ponte de SSO, a partir dos templates deste repo:
+
+```
+cp deploy/roundcube/sso-login.php /opt/roundcube/public_html/sso-login.php
+cp deploy/roundcube/sso-secret.php.example /opt/roundcube/public_html/sso-secret.php
+chown roundcube:roundcube /opt/roundcube/public_html/sso-login.php /opt/roundcube/public_html/sso-secret.php
+chmod 0400 /opt/roundcube/public_html/sso-secret.php
+```
+
+Editar `sso-secret.php` — colar o MESMO valor de `AGENT_SHARED_SECRET`
+do `.env` deste Agent (`grep AGENT_SHARED_SECRET /opt/arcnp-agent/.env`).
+
+Pool PHP-FPM isolada e serviço:
+
+```
+mkdir -p /etc/php-fpm-roundcube.d
+cp deploy/php-fpm/php-fpm-roundcube.conf /etc/php-fpm-roundcube.conf
+cp deploy/php-fpm/roundcube-pool.conf /etc/php-fpm-roundcube.d/roundcube.conf
+cp deploy/systemd/php-fpm-roundcube.service /etc/systemd/system/
+
+systemctl daemon-reload
+systemctl enable --now php-fpm-roundcube
+```
+
+Nginx (porta própria 8445):
+
+```
+cp deploy/nginx/roundcube.conf /etc/nginx/conf.d/roundcube.conf
+nginx -t && systemctl reload nginx
+```
+
+Firewall (pública, igual à 8444 do phpMyAdmin):
+
+```
+firewall-cmd --permanent --add-port=8445/tcp
+firewall-cmd --reload
+```
+
+Limpeza dos nonces de uso único (mesma lógica da seção 15):
+
+```
+cat > /etc/cron.d/roundcube-sso-nonces << 'EOF'
+15 * * * * root find /var/lib/roundcube-sso/nonces -mmin +60 -delete
+EOF
+```

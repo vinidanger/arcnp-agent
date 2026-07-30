@@ -1,0 +1,17 @@
+# Espelha o php-fpm-pma.service, isolado pro Roundcube. Ver
+# deploy/php-fpm/php-fpm-roundcube.conf para o motivo da separação.
+
+[Unit]
+Description=PHP-FPM for Roundcube webmail (Arcnp)
+After=network.target
+
+[Service]
+Type=notify
+ExecStart=/usr/sbin/php-fpm --nodaemonize --fpm-config /etc/php-fpm-roundcube.conf
+ExecReload=/bin/kill -USR2 $MAINPID
+PrivateTmp=true
+RuntimeDirectory=php-fpm-roundcube
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target

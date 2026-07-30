@@ -57,6 +57,73 @@ class ProcessRunner
         return Process::run(['id', '-u', $username])->successful();
     }
 
+    public function userId(string $username): int
+    {
+        $result = Process::run(['id', '-u', $username]);
+
+        if ($result->failed()) {
+            throw new RuntimeException("Usuário Linux não encontrado: {$username}");
+        }
+
+        return (int) trim($result->output());
+    }
+
+    public function groupId(string $username): int
+    {
+        $result = Process::run(['id', '-g', $username]);
+
+        if ($result->failed()) {
+            throw new RuntimeException("Usuário Linux não encontrado: {$username}");
+        }
+
+        return (int) trim($result->output());
+    }
+
+    public function syncMailState(string $bundle): void
+    {
+        $result = Process::timeout(30)->input($bundle)->run([
+            'sudo', '-n', base_path('scripts/manage-mail.sh'), 'sync-state',
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Sincronização de e-mail falhou: '.trim($result->errorOutput() ?: $result->output()));
+        }
+    }
+
+    /**
+     * Idempotente: se a chave já existir pro domínio, só devolve o
+     * valor do TXT de novo (não gera outra) — sync_dkim é chamado toda
+     * vez que a lista de domínios com DKIM muda, não só na primeira vez.
+     */
+    public function generateDkimKey(string $domain): string
+    {
+        $result = Process::timeout(30)->run([
+            'sudo', '-n', base_path('scripts/manage-mail-dkim.sh'), 'generate-key', $domain,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Geração de chave DKIM falhou: '.trim($result->errorOutput() ?: $result->output()));
+        }
+
+        return trim($result->output());
+    }
+
+    public function syncDkimTables(string $bundle): void
+    {
+        $result = Process::timeout(30)->input($bundle)->run([
+            'sudo', '-n', base_path('scripts/manage-mail-dkim.sh'), 'sync-tables',
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Sincronização de tabelas DKIM falhou: '.trim($result->errorOutput() ?: $result->output()));
+        }
+    }
+
+    public function deleteDkimKey(string $domain): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/manage-mail-dkim.sh'), 'delete-key', $domain]);
+    }
+
     /**
      * $target é o subdiretório (location=inside) ou o domínio inteiro
      * (location=outside, cria domains/{target}/public_html).
