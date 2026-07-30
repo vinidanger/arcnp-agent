@@ -721,14 +721,18 @@ GRANT ALL PRIVILEGES ON roundcube.* TO 'roundcube'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-Baixar o Roundcube direto do site oficial:
+Baixar o Roundcube direto do GitHub — os arquivos de release têm a
+versão no nome (ex: `roundcubemail-1.6.9-complete.tar.gz`), não existe
+um link fixo sem versão, então descobre a URL certa via API antes de
+baixar:
 
 ```
 cd /tmp
-curl -LO https://github.com/roundcube/roundcubemail/releases/latest/download/roundcubemail-complete.tar.gz
-tar -xzf roundcubemail-complete.tar.gz
+URL=$(curl -s https://api.github.com/repos/roundcube/roundcubemail/releases/latest | grep '"browser_download_url":.*complete\.tar\.gz"' | cut -d '"' -f 4)
+curl -LO "$URL"
+tar -xzf roundcubemail-*-complete.tar.gz
 rsync -a --delete roundcubemail-*/ /opt/roundcube/
-rm -rf roundcubemail-* roundcubemail-complete.tar.gz
+rm -rf roundcubemail-*
 chown -R roundcube:roundcube /opt/roundcube
 ```
 
