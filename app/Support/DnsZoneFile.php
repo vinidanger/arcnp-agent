@@ -55,9 +55,27 @@ class DnsZoneFile
             'A', 'AAAA' => "{$name}\t{$ttl}\tIN\t{$type}\t{$record['content']}",
             'CNAME', 'NS' => "{$name}\t{$ttl}\tIN\t{$type}\t".self::fqdn($record['content']),
             'MX' => "{$name}\t{$ttl}\tIN\tMX\t{$record['priority']}\t".self::fqdn($record['content']),
-            'TXT' => "{$name}\t{$ttl}\tIN\tTXT\t\"".str_replace('"', '\\"', $record['content']).'"',
+            'TXT' => "{$name}\t{$ttl}\tIN\tTXT\t".self::txtChunks($record['content']),
             default => '',
         };
+    }
+
+    /**
+     * Um "character-string" do DNS não passa de 255 bytes no formato de
+     * fio — valor mais longo que isso (chave DKIM, por exemplo) precisa
+     * virar várias strings entre aspas concatenadas, não uma só. BIND
+     * junta tudo de volta como um único valor lógico de TXT na hora de
+     * responder a consulta.
+     */
+    private static function txtChunks(string $content): string
+    {
+        $escaped = str_replace('"', '\\"', $content);
+
+        // str_split (não mb_str_split): o limite de 255 é em BYTES no
+        // formato de fio do DNS, não em caracteres.
+        $chunks = str_split($escaped, 255);
+
+        return implode(' ', array_map(fn (string $chunk) => "\"{$chunk}\"", $chunks));
     }
 
     private static function fqdn(string $host): string

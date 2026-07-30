@@ -11,7 +11,12 @@ use InvalidArgumentException;
  */
 class DnsRecordValidator
 {
-    private const NAME_PATTERN = '/^(@|[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*)$/';
+    /**
+     * Aceita rótulo começando com "_" (ex: "_dmarc", "mail._domainkey")
+     * — convenção padrão de DNS pra registros de serviço/metadado, não
+     * é hostname de verdade então não segue a regra estrita de hostname.
+     */
+    private const NAME_PATTERN = '/^(@|[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?(\.[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?)*)$/';
 
     private const HOSTNAME_PATTERN = '/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+\.?$/';
 
@@ -89,9 +94,15 @@ class DnsRecordValidator
         return (int) $value;
     }
 
+    /**
+     * 4000 cobre com folga uma chave DKIM de até 4096 bits — o limite de
+     * 255 bytes por "character-string" é do formato de fio do DNS, não
+     * do valor lógico do TXT; DnsZoneFile::renderRecord() é quem quebra
+     * isso em pedaços de 255 bytes na hora de escrever o zone file.
+     */
     private static function validateText(string $value): void
     {
-        if ($value === '' || strlen($value) > 255 || str_contains($value, "\n") || str_contains($value, "\r")) {
+        if ($value === '' || strlen($value) > 4000 || str_contains($value, "\n") || str_contains($value, "\r")) {
             throw new InvalidArgumentException('Conteúdo TXT inválido.');
         }
     }

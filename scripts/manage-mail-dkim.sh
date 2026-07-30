@@ -23,7 +23,7 @@ case "$OPERATION" in
 
         if [[ ! -f "$KEYDIR/mail.private" ]]; then
             mkdir -p "$KEYDIR"
-            opendkim-genkey -b 2048 -d "$DOMAIN" -s mail -D "$KEYDIR"
+            /usr/sbin/opendkim-genkey -b 2048 -d "$DOMAIN" -s mail -D "$KEYDIR"
             chown -R opendkim:opendkim "$KEYDIR"
             chmod 600 "$KEYDIR/mail.private"
         fi
