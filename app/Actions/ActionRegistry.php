@@ -34,6 +34,7 @@ use App\Actions\Ssh\SetSshAccessAction;
 use App\Actions\Ssh\SetSshPasswordAction;
 use App\Actions\Ssh\SyncSshKeysAction;
 use App\Actions\Ssl\IssueSslCertificateAction;
+use App\Actions\Ssl\RenewAllSslCertificatesAction;
 use App\Actions\Web\CreateAddonDomainAction;
 use App\Actions\Web\CreateVirtualHostAction;
 use App\Actions\Web\DeleteAddonDomainAction;
@@ -62,6 +63,7 @@ class ActionRegistry
         'hosting.suspend' => SuspendHostingAccountAction::class,
         'hosting.reactivate' => ReactivateHostingAccountAction::class,
         'ssl.issue_certificate' => IssueSslCertificateAction::class,
+        'ssl.renew_all' => RenewAllSslCertificatesAction::class,
         'web.create_addon_domain' => CreateAddonDomainAction::class,
         'web.delete_addon_domain' => DeleteAddonDomainAction::class,
         'php.switch_version' => SwitchPhpVersionAction::class,

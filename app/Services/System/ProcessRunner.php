@@ -152,6 +152,15 @@ class ProcessRunner
     }
 
     /**
+     * Renova TODOS os certificados do servidor de uma vez (não é por
+     * domínio) — mesmo motivo de timeout longo/assíncrono do issueSslCertificate.
+     */
+    public function renewAllSslCertificates(): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/renew-ssl-certificates.sh')], 300);
+    }
+
+    /**
      * Dump sem privilégio (o próprio Agent já tem acesso de leitura ao
      * MySQL via a conexão mysql_admin) — grava comprimido direto no
      * destino. Senha via env MYSQL_PWD em vez de -p na linha de
