@@ -867,9 +867,23 @@ visudo -c
 ## 26. Upload de arquivo (binário)
 
 Endpoint novo (`POST /api/files/{username}/upload`) reaproveita a
-mesma pool/serviço do Agent já em pé — não precisa de nada extra de
-infraestrutura. Só vale conferir se o `client_max_body_size` do nginx
-na frente do Agent (se houver um, ou o limite padrão do próprio
-servidor embutido) comporta o tamanho de arquivo que os clientes vão
-enviar; se ficar pequeno, upload grande falha silenciosamente com
-erro genérico de conexão.
+mesma pool/serviço do Agent já em pé. O pool (`deploy/php-fpm/arcnp-agent.conf`)
+e o vhost (`deploy/nginx/arcnp-agent.conf`) já vêm com `upload_max_filesize`/
+`post_max_size`/`client_max_body_size` em 110M — folga sobre o limite
+já validado no Painel (`max:102400` KB, ver `FileManagerController::upload`).
+Reinstalar os dois depois do deploy (mesmo comando da seção 3/5):
+
+```
+cp deploy/php-fpm/arcnp-agent.conf /etc/php-fpm.d/arcnp-agent.conf
+cp deploy/nginx/arcnp-agent.conf /etc/nginx/conf.d/arcnp-agent.conf
+systemctl restart php-fpm
+nginx -t && systemctl reload nginx
+```
+
+**Isso resolve só o hop Painel → Agent.** O hop navegador → Painel
+passa pelo nginx/PHP-FPM do próprio Painel, que não é gerenciado por
+este repositório — conferir lá também (`client_max_body_size` do
+vhost do Painel e `upload_max_filesize`/`post_max_size` do pool PHP
+que ele usa), senão um arquivo grande é rejeitado ANTES de sequer
+chegar no Agent, com o mesmo sintoma (erro genérico de conexão no
+navegador).
