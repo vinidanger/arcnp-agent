@@ -12,7 +12,12 @@ use App\Support\PhpVersion;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
 
-class CreatePhpFpmPoolAction implements AgentAction
+/**
+ * Reescreve o pool JÁ EXISTENTE da conta (mesma versão de PHP, só os
+ * valores tunáveis mudam) — diferente de CreatePhpFpmPoolAction/
+ * SwitchPhpVersionAction, que lidam com pool novo/em versão diferente.
+ */
+class UpdatePhpFpmPoolSettingsAction implements AgentAction
 {
     public function __construct(
         private ProcessRunner $processRunner,
@@ -28,13 +33,13 @@ class CreatePhpFpmPoolAction implements AgentAction
     public function execute(array $payload): array
     {
         $username = LinuxUsername::validate($payload['username'] ?? '');
-        $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
-        PhpVersion::config($phpVersion); // valida a versão
+        $phpVersion = $payload['php_version'] ?? '';
+        PhpVersion::config($phpVersion);
 
         $configPath = PhpFpmPool::poolConfigPath($username, $phpVersion);
 
-        if (File::exists($configPath)) {
-            throw new RuntimeException("Pool PHP-FPM já existe para: {$username}");
+        if (! File::exists($configPath)) {
+            throw new RuntimeException("Pool PHP-FPM não encontrado para: {$username}");
         }
 
         $contents = $this->templateRenderer->render(
@@ -43,14 +48,8 @@ class CreatePhpFpmPoolAction implements AgentAction
         );
 
         File::put($configPath, $contents);
+        $this->processRunner->reloadPhpFpm($phpVersion);
 
-        try {
-            $this->processRunner->reloadPhpFpm($phpVersion);
-        } catch (\Throwable $e) {
-            File::delete($configPath);
-            throw $e;
-        }
-
-        return ['username' => $username, 'socket_path' => PhpFpmPool::socketPath($username, $phpVersion)];
+        return ['username' => $username];
     }
 }

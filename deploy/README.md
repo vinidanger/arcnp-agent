@@ -873,8 +873,14 @@ e o vhost (`deploy/nginx/arcnp-agent.conf`) já vêm com `upload_max_filesize`/
 limite configurável em Admin > Configurações no Painel (chave
 "max_upload_mb", tabela `settings`, padrão 100 MB). Se o admin subir
 esse valor pra além de 300 MB, precisa reinstalar este pool/vhost com
-um número maior também. Reinstalar os dois depois do deploy (mesmo
-comando da seção 3/5):
+um número maior também.
+
+O pool também sobe `memory_limit` pra 512M: o corpo inteiro do upload é
+lido pra memória duas vezes no Agent (uma em `VerifySignedRequest`, pra
+recalcular o HMAC sobre o corpo bruto, outra em `FileUploadController`)
+— sem isso, o padrão de 128M estoura bem antes do teto de 300M acima
+("Allowed memory size... exhausted"). Reinstalar os dois depois do
+deploy (mesmo comando da seção 3/5):
 
 ```
 cp deploy/php-fpm/arcnp-agent.conf /etc/php-fpm.d/arcnp-agent.conf

@@ -7,6 +7,7 @@ use App\Services\System\ProcessRunner;
 use App\Services\System\TemplateRenderer;
 use App\Support\LinuxUsername;
 use App\Support\PhpFpmPool;
+use App\Support\PhpFpmPoolSettings;
 use App\Support\PhpVersion;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
@@ -41,18 +42,20 @@ class SwitchPhpVersionAction implements AgentAction
             return ['username' => $username, 'switched' => false];
         }
 
-        $homeDir = config('provisioning.home_base_dir')."/{$username}";
         $newPoolPath = PhpFpmPool::poolConfigPath($username, $newVersion);
 
         if (File::exists($newPoolPath)) {
             throw new RuntimeException("Pool já existe na versão de destino: {$newVersion}");
         }
 
-        $contents = $this->templateRenderer->render('php-fpm-pool', [
-            'username' => $username,
-            'socket_path' => PhpFpmPool::socketPath($username, $newVersion),
-            'home_dir' => $homeDir,
-        ]);
+        // $payload carrega os pool settings atuais da conta (se ela já
+        // tiver algum customizado) — sem isso, toda troca de versão
+        // silenciosamente resetaria memory_limit/upload_max_filesize/etc
+        // de volta pro padrão global.
+        $contents = $this->templateRenderer->render(
+            'php-fpm-pool',
+            PhpFpmPoolSettings::variables($username, $newVersion, $payload),
+        );
 
         File::put($newPoolPath, $contents);
         $this->processRunner->reloadPhpFpm($newVersion);

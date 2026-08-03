@@ -33,6 +33,7 @@ use App\Actions\Mail\SyncMailStateAction;
 use App\Actions\Php\CreatePhpFpmPoolAction;
 use App\Actions\Php\DeletePhpFpmPoolAction;
 use App\Actions\Php\SwitchPhpVersionAction;
+use App\Actions\Php\UpdatePhpFpmPoolSettingsAction;
 use App\Actions\Ssh\SetSshAccessAction;
 use App\Actions\Ssh\SetSshPasswordAction;
 use App\Actions\Ssh\SyncSshKeysAction;
@@ -70,6 +71,7 @@ class ActionRegistry
         'web.create_addon_domain' => CreateAddonDomainAction::class,
         'web.delete_addon_domain' => DeleteAddonDomainAction::class,
         'php.switch_version' => SwitchPhpVersionAction::class,
+        'php.update_pool_settings' => UpdatePhpFpmPoolSettingsAction::class,
         'web.update_vhost_php_version' => UpdateVirtualHostPhpVersionAction::class,
         'backup.create' => CreateBackupAction::class,
         'backup.delete' => DeleteBackupAction::class,

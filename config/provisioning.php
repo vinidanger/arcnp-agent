@@ -46,4 +46,18 @@ return [
      * expiração/problema de renovação — não é por domínio, é fixo).
      */
     'ssl_admin_email' => env('AGENT_SSL_ADMIN_EMAIL'),
+
+    /*
+     * Valores usados no pool PHP-FPM de uma conta quando ela não tem
+     * ajuste próprio salvo (php_fpm_settings nulo no Painel) — tanto na
+     * criação quanto numa troca de versão de PHP. Editável por conta via
+     * Admin/Cliente > "Configurações de PHP" (ação php.update_pool_settings).
+     */
+    'default_pool_settings' => [
+        'memory_limit' => '128M',
+        'upload_max_filesize' => '64M',
+        'post_max_size' => '64M',
+        'max_execution_time' => '30',
+        'short_open_tag' => 'Off',
+    ],
 ];
