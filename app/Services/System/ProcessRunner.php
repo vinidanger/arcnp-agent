@@ -322,7 +322,11 @@ class ProcessRunner
      */
     public function compressFiles(string $username, array $sourcePaths, string $outputPath, ?string $root = null): void
     {
-        $result = Process::timeout(120)->input(implode("\n", $sourcePaths))->run([
+        // Barra final obrigatória: sem ela, "while read" no bash
+        // silenciosamente descarta a ÚLTIMA linha quando ela não termina
+        // em quebra de linha (comportamento clássico do bash) — com uma
+        // lista de 1 item só, isso perdia o item inteiro.
+        $result = Process::timeout(120)->input(implode("\n", $sourcePaths)."\n")->run([
             'sudo', '-n', base_path('scripts/manage-archive.sh'), $username, (string) $root, 'compress', $outputPath,
         ]);
 
