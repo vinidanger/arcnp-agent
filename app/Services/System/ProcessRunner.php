@@ -318,7 +318,11 @@ class ProcessRunner
             $command[] = $path2;
         }
 
-        $process = Process::timeout(30);
+        // 180s, não 30 — esse método também escreve upload de arquivo
+        // grande (FileUploadController), e gravar centenas de MB via
+        // sudo (com ajuste de posse/ACL) pode legitimamente passar de
+        // 30s num disco mais lento.
+        $process = Process::timeout(180);
 
         if ($content !== null) {
             $process = $process->input($content);

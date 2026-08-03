@@ -879,8 +879,20 @@ O pool também sobe `memory_limit` pra 512M: o corpo inteiro do upload é
 lido pra memória duas vezes no Agent (uma em `VerifySignedRequest`, pra
 recalcular o HMAC sobre o corpo bruto, outra em `FileUploadController`)
 — sem isso, o padrão de 128M estoura bem antes do teto de 300M acima
-("Allowed memory size... exhausted"). Reinstalar os dois depois do
-deploy (mesmo comando da seção 3/5):
+("Allowed memory size... exhausted").
+
+E `max_execution_time` pra 200s: gravar um upload grande em disco (via
+`manage-file.sh`, com sudo + ajuste de posse/ACL) pode passar do padrão
+de 30s do PHP num disco mais lento ("Maximum execution time... exceeded",
+capturado em `Symfony\Component\Process\Pipes\AbstractPipes`). Precisa
+bater com dois outros tetos que também derrubam a mesma requisição se
+ficarem menores: `Process::timeout(180)` em
+`ProcessRunner::manageFile()` (código, já ajustado) e
+`fastcgi_read_timeout`/`fastcgi_send_timeout` (200s) no vhost nginx —
+o mais curto dos três mata a requisição primeiro, então todos precisam
+ficar acima do tempo real de gravação.
+
+Reinstalar os dois depois do deploy (mesmo comando da seção 3/5):
 
 ```
 cp deploy/php-fpm/arcnp-agent.conf /etc/php-fpm.d/arcnp-agent.conf
