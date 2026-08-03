@@ -869,9 +869,12 @@ visudo -c
 Endpoint novo (`POST /api/files/{username}/upload`) reaproveita a
 mesma pool/serviço do Agent já em pé. O pool (`deploy/php-fpm/arcnp-agent.conf`)
 e o vhost (`deploy/nginx/arcnp-agent.conf`) já vêm com `upload_max_filesize`/
-`post_max_size`/`client_max_body_size` em 110M — folga sobre o limite
-já validado no Painel (`max:102400` KB, ver `FileManagerController::upload`).
-Reinstalar os dois depois do deploy (mesmo comando da seção 3/5):
+`post_max_size`/`client_max_body_size` em 300M — teto folgado sobre o
+limite configurável em Admin > Configurações no Painel (chave
+"max_upload_mb", tabela `settings`, padrão 100 MB). Se o admin subir
+esse valor pra além de 300 MB, precisa reinstalar este pool/vhost com
+um número maior também. Reinstalar os dois depois do deploy (mesmo
+comando da seção 3/5):
 
 ```
 cp deploy/php-fpm/arcnp-agent.conf /etc/php-fpm.d/arcnp-agent.conf
