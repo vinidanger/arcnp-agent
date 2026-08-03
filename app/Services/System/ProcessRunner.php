@@ -318,6 +318,31 @@ class ProcessRunner
     }
 
     /**
+     * @param  list<string>  $sourcePaths  Caminhos relativos (à raiz) a incluir no zip.
+     */
+    public function compressFiles(string $username, array $sourcePaths, string $outputPath, ?string $root = null): void
+    {
+        $result = Process::timeout(120)->input(implode("\n", $sourcePaths))->run([
+            'sudo', '-n', base_path('scripts/manage-archive.sh'), $username, (string) $root, 'compress', $outputPath,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Falha ao compactar: '.trim($result->errorOutput() ?: $result->output()));
+        }
+    }
+
+    public function extractArchive(string $username, string $zipPath, string $destPath, ?string $root = null): void
+    {
+        $result = Process::timeout(120)->run([
+            'sudo', '-n', base_path('scripts/manage-archive.sh'), $username, (string) $root, 'extract', $zipPath, $destPath,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Falha ao extrair: '.trim($result->errorOutput() ?: $result->output()));
+        }
+    }
+
+    /**
      * Grava o zone file (validado via named-checkzone dentro do
      * script) — NÃO recarrega. Pra zona nova, o arquivo precisa
      * existir antes do zones.conf referenciar ela; pra edição de

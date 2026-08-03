@@ -13,9 +13,11 @@ use App\Actions\Disk\DiskUsageAction;
 use App\Actions\Dns\CreateDnsZoneAction;
 use App\Actions\Dns\DeleteDnsZoneAction;
 use App\Actions\Dns\UpdateDnsZoneRecordsAction;
+use App\Actions\Files\CompressFilesAction;
 use App\Actions\Files\CreateDirectoryAction;
 use App\Actions\Files\CreateFileAction;
 use App\Actions\Files\DeleteFileAction;
+use App\Actions\Files\ExtractArchiveAction;
 use App\Actions\Files\ListDirectoryAction;
 use App\Actions\Files\ReadFileAction;
 use App\Actions\Files\RenameFileAction;
@@ -76,6 +78,8 @@ class ActionRegistry
         'files.create_file' => CreateFileAction::class,
         'files.delete' => DeleteFileAction::class,
         'files.rename' => RenameFileAction::class,
+        'files.compress' => CompressFilesAction::class,
+        'files.extract' => ExtractArchiveAction::class,
         'disk.usage' => DiskUsageAction::class,
         'cron.sync' => SyncCronJobsAction::class,
         'ssh.set_enabled' => SetSshAccessAction::class,

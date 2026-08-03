@@ -830,3 +830,28 @@ cat > /etc/cron.d/roundcube-sso-nonces << 'EOF'
 15 * * * * root find /var/lib/roundcube-sso/nonces -mmin +60 -delete
 EOF
 ```
+
+## 25. Compactar/extrair no gerenciador de arquivos
+
+`manage-archive.sh` usa os binários `zip`/`unzip` direto — sem eles
+instalados, toda tentativa de compactar/extrair falha:
+
+```
+dnf install -y zip unzip
+```
+
+```
+chmod +x scripts/manage-archive.sh
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+## 26. Upload de arquivo (binário)
+
+Endpoint novo (`POST /api/files/{username}/upload`) reaproveita a
+mesma pool/serviço do Agent já em pé — não precisa de nada extra de
+infraestrutura. Só vale conferir se o `client_max_body_size` do nginx
+na frente do Agent (se houver um, ou o limite padrão do próprio
+servidor embutido) comporta o tamanho de arquivo que os clientes vão
+enviar; se ficar pequeno, upload grande falha silenciosamente com
+erro genérico de conexão.

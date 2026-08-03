@@ -26,6 +26,7 @@ arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-ssh.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-dns-zone.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-mail.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-mail-dkim.sh *
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-archive.sh *
 
 # Uma linha por versão de PHP suportada (config/provisioning.php) — cada
 # uma isolada no próprio serviço, reload de uma nunca afeta as outras.
