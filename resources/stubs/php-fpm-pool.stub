@@ -14,10 +14,20 @@ pm.process_idle_timeout = 30s
 php_admin_value[open_basedir] = {{home_dir}}:/tmp
 php_admin_value[upload_tmp_dir] = /tmp
 php_admin_value[error_log] = {{home_dir}}/logs/php-error.log
-php_admin_flag[log_errors] = on
 
+; Configurável por conta via Admin/Cliente > PHP (ver
+; App\Support\PhpFpmPoolSettings::TUNABLE_KEYS no Agent — precisa
+; espelhar exatamente essa lista, senão sobra placeholder sem valor).
 php_admin_value[memory_limit] = {{memory_limit}}
 php_admin_value[upload_max_filesize] = {{upload_max_filesize}}
 php_admin_value[post_max_size] = {{post_max_size}}
 php_admin_value[max_execution_time] = {{max_execution_time}}
+php_admin_value[max_input_time] = {{max_input_time}}
+php_admin_value[max_input_vars] = {{max_input_vars}}
+php_admin_value[max_file_uploads] = {{max_file_uploads}}
+php_admin_value[session.gc_maxlifetime] = {{session.gc_maxlifetime}}
+php_admin_flag[display_errors] = {{display_errors}}
+php_admin_flag[log_errors] = {{log_errors}}
+php_admin_value[error_reporting] = {{error_reporting}}
+php_admin_flag[file_uploads] = {{file_uploads}}
 php_admin_flag[short_open_tag] = {{short_open_tag}}
