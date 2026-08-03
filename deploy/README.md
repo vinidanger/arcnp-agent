@@ -359,6 +359,24 @@ fica em `/opt/arcnp-agent/storage` depois de pronto: o diretório
 temporário de dump é apagado ao final de cada execução, sucesso ou
 falha.
 
+**Download em lote (zip) e remoção de backup** — reaproveita o `zip`
+já instalado na seção 25 (compactar/extrair no gerenciador de
+arquivos), sem pacote novo.
+Ganhou uma linha nova no sudoers (`delete-backup.sh`, apagar exige
+escrita no diretório `backups/`, que o `arcnpagent` não tem por padrão
+— só leitura via ACL):
+
+```
+chmod +x scripts/delete-backup.sh
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+O zip de "Completo"/"Bancos de dados" é montado em
+`storage/app/backup-zip-tmp` (apagado logo depois do download) — não
+precisa de privilégio, é a mesma leitura via ACL que o download de
+arquivo único já usa.
+
 ## 17. Gerenciador de arquivos
 
 Listar/ler é leitura direta (ACL do `arcnpagent` em `public_html`,

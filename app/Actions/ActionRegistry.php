@@ -3,6 +3,7 @@
 namespace App\Actions;
 
 use App\Actions\Backup\CreateBackupAction;
+use App\Actions\Backup\DeleteBackupAction;
 use App\Actions\Contracts\AgentAction;
 use App\Actions\Cron\SyncCronJobsAction;
 use App\Actions\Database\CreateMysqlDatabaseAction;
@@ -71,6 +72,7 @@ class ActionRegistry
         'php.switch_version' => SwitchPhpVersionAction::class,
         'web.update_vhost_php_version' => UpdateVirtualHostPhpVersionAction::class,
         'backup.create' => CreateBackupAction::class,
+        'backup.delete' => DeleteBackupAction::class,
         'files.list' => ListDirectoryAction::class,
         'files.read' => ReadFileAction::class,
         'files.write' => WriteFileAction::class,

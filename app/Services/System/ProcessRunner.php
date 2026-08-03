@@ -213,6 +213,22 @@ class ProcessRunner
     }
 
     /**
+     * @param  list<string>  $filenames
+     */
+    public function deleteBackupFiles(string $username, array $filenames): void
+    {
+        $result = Process::timeout(30)->run([
+            'sudo', '-n', base_path('scripts/delete-backup.sh'), $username, ...$filenames,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException(
+                'Falha ao remover backup: '.trim($result->errorOutput() ?: $result->output())
+            );
+        }
+    }
+
+    /**
      * Troca o shell de login entre /bin/bash e /sbin/nologin. Login
      * por senha e por chave convivem (ver set-password) — precisa de
      * PasswordAuthentication yes no sshd_config, ver deploy/README.md.

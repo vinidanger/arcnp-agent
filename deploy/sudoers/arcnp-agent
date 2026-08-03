@@ -19,6 +19,7 @@ arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/renew-ssl-certificates.
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/create-addon-directory.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/delete-addon-directory.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/create-backup.sh *
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/delete-backup.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-file.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/disk-usage.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/sync-cron.sh *
