@@ -83,7 +83,10 @@ case "$OPERATION" in
         chown "$USERNAME:$USERNAME" "$TARGET"
         ;;
     extract)
-        [[ -z "$REL_PATH" || -z "$REL_PATH_2" ]] && { echo "Caminhos obrigatórios" >&2; exit 1; }
+        # REL_PATH_2 vazio é válido (extrair na raiz) — resolve() já
+        # trata "" como o próprio BASE_REAL. Só o zip em si (REL_PATH)
+        # precisa mesmo ser não-vazio.
+        [[ -z "$REL_PATH" ]] && { echo "Caminho do zip obrigatório" >&2; exit 1; }
         ZIP_PATH=$(resolve "$REL_PATH")
         DEST_PATH=$(resolve "$REL_PATH_2")
         [[ ! -f "$ZIP_PATH" ]] && { echo "Arquivo não encontrado: $REL_PATH" >&2; exit 1; }
