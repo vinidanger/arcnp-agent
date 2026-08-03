@@ -25,8 +25,13 @@ class ExtractArchiveAction implements AgentAction
         $dest = (string) ($payload['dest'] ?? '');
         $root = blank($payload['root'] ?? null) ? null : $payload['root'];
 
-        if ($path === '' || $dest === '') {
-            throw new RuntimeException('path e dest são obrigatórios.');
+        // dest vazio é válido (extrair na raiz de public_html/domínio) —
+        // mesma convenção de "string vazia = raiz" usada em todo o resto
+        // do gerenciador de arquivos (ver FileManagerPath::join no
+        // Painel e resolve() em manage-archive.sh). Só path precisa
+        // mesmo ser não-vazio, já que não dá pra extrair "nada".
+        if ($path === '') {
+            throw new RuntimeException('path é obrigatório.');
         }
 
         $this->processRunner->extractArchive($username, $path, $dest, $root);
