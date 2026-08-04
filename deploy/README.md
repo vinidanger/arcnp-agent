@@ -1217,6 +1217,7 @@ user_config_dir=/etc/vsftpd/user_conf
 pam_service_name=vsftpd-virtual
 local_umask=022
 seccomp_sandbox=NO
+reverse_lookup_enable=NO
 
 pasv_enable=YES
 pasv_min_port=30000
@@ -1237,6 +1238,14 @@ rsa_private_key_file=/etc/vsftpd/ftp.key
 cada usuário virtual aqui já mapeia pra um UID real e ISOLADO que já é
 dono legítimo de toda a árvore, não é o cenário de usuário anônimo
 compartilhado que a proteção original mirava.)
+
+(`reverse_lookup_enable=NO` — sem isso, o vsftpd trava por ~20s depois
+do login bem sucedido tentando resolver o hostname reverso do cliente
+pra log, e como a conta já está com chroot pro home dela [sem
+`/etc/resolv.conf` lá dentro], essa resolução nunca completa. Sintoma
+visto na prática: PAM autentica com sucesso no log, mas o cliente FTP
+nunca recebe o "230 Login successful" e cai por timeout — parece
+queda de TLS, mas é só o servidor pendurado nessa resolução.)
 
 Certificado — **autoassinado, de propósito**, diferente do
 `mail_hostname` da seção 22. Let's Encrypt não emite certificado pra
