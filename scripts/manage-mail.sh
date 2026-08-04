@@ -23,7 +23,7 @@ case "$OPERATION" in
             file { print > file }
         '
 
-        for section in POSTFIX_VIRTUAL_DOMAINS POSTFIX_VIRTUAL_MAILBOX_MAPS POSTFIX_VIRTUAL_UID_MAPS POSTFIX_VIRTUAL_GID_MAPS DOVECOT_USERS; do
+        for section in POSTFIX_VIRTUAL_DOMAINS POSTFIX_VIRTUAL_MAILBOX_MAPS POSTFIX_VIRTUAL_ALIAS_MAPS POSTFIX_VIRTUAL_UID_MAPS POSTFIX_VIRTUAL_GID_MAPS DOVECOT_USERS; do
             if [[ ! -f "$TMP/$section" ]]; then
                 echo "Bundle inválido: faltando seção $section" >&2
                 exit 1
@@ -32,6 +32,7 @@ case "$OPERATION" in
 
         install -m 0644 -o root -g root "$TMP/POSTFIX_VIRTUAL_DOMAINS" /etc/postfix/virtual_domains
         install -m 0644 -o root -g root "$TMP/POSTFIX_VIRTUAL_MAILBOX_MAPS" /etc/postfix/virtual_mailbox_maps
+        install -m 0644 -o root -g root "$TMP/POSTFIX_VIRTUAL_ALIAS_MAPS" /etc/postfix/virtual_alias_maps
         install -m 0644 -o root -g root "$TMP/POSTFIX_VIRTUAL_UID_MAPS" /etc/postfix/virtual_uid_maps
         install -m 0644 -o root -g root "$TMP/POSTFIX_VIRTUAL_GID_MAPS" /etc/postfix/virtual_gid_maps
         install -m 0640 -o root -g dovecot "$TMP/DOVECOT_USERS" /etc/dovecot/users
@@ -51,6 +52,7 @@ case "$OPERATION" in
 
         postmap /etc/postfix/virtual_domains
         postmap /etc/postfix/virtual_mailbox_maps
+        postmap /etc/postfix/virtual_alias_maps
         postmap /etc/postfix/virtual_uid_maps
         postmap /etc/postfix/virtual_gid_maps
 

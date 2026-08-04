@@ -3,18 +3,19 @@
 namespace App\Support;
 
 /**
- * Empacota os 5 arquivos que o Postfix/Dovecot precisam num único
- * texto (seções delimitadas por "===NOME==="), pra sincronizar tudo
- * numa chamada só ao script sudo — mesma ideia do zones.conf do DNS,
- * só que com múltiplos arquivos de uma vez porque Postfix e Dovecot
- * cada um tem seu próprio formato de mapeamento pro mesmo dado.
+ * Empacota os arquivos que o Postfix/Dovecot precisam num único texto
+ * (seções delimitadas por "===NOME==="), pra sincronizar tudo numa
+ * chamada só ao script sudo — mesma ideia do zones.conf do DNS, só que
+ * com múltiplos arquivos de uma vez porque Postfix e Dovecot cada um
+ * tem seu próprio formato de mapeamento pro mesmo dado.
  *
  * @param list<string> $domains
  * @param list<array{email: string, username: string, domain: string, local_part: string, password_hash: string, uid: int, gid: int}> $mailboxes
+ * @param list<array{source: string, destination: string}> $forwarders
  */
 class MailStateBundle
 {
-    public static function render(array $domains, array $mailboxes): string
+    public static function render(array $domains, array $mailboxes, array $forwarders = []): string
     {
         $virtualDomains = implode("\n", array_map(fn (string $d) => "{$d} OK", $domains));
 
@@ -33,8 +34,15 @@ class MailStateBundle
             $dovecotUsers[] = "{$mailbox['email']}:{$mailbox['password_hash']}:{$mailbox['uid']}:{$mailbox['gid']}::{$home}::userdb_mail=maildir:{$home}/Maildir";
         }
 
+        // Encaminhamento puro (sem caixa própria) precisa de um mapa
+        // Postfix SEPARADO de virtual_mailbox_maps — esse último exige
+        // uma caixa real por trás (Maildir/UID/GID), então um alias que
+        // só redireciona pra outro endereço não pode entrar nele.
+        $aliasMaps = array_map(fn ($f) => "{$f['source']} {$f['destination']}", $forwarders);
+
         return self::section('POSTFIX_VIRTUAL_DOMAINS', $virtualDomains)
             .self::section('POSTFIX_VIRTUAL_MAILBOX_MAPS', implode("\n", $mailboxMaps))
+            .self::section('POSTFIX_VIRTUAL_ALIAS_MAPS', implode("\n", $aliasMaps))
             .self::section('POSTFIX_VIRTUAL_UID_MAPS', implode("\n", $uidMaps))
             .self::section('POSTFIX_VIRTUAL_GID_MAPS', implode("\n", $gidMaps))
             .self::section('DOVECOT_USERS', implode("\n", $dovecotUsers))

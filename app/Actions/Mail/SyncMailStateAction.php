@@ -9,6 +9,7 @@ use App\Support\EmailAddress;
 use App\Support\LinuxUsername;
 use App\Support\MailPasswordHash;
 use App\Support\MailStateBundle;
+use InvalidArgumentException;
 
 /**
  * O Painel manda o estado COMPLETO do servidor (todo domínio com
@@ -49,9 +50,22 @@ class SyncMailStateAction implements AgentAction
             ];
         }, $payload['mailboxes'] ?? []);
 
-        $bundle = MailStateBundle::render($domains, $mailboxes);
+        $forwarders = array_map(function (array $forwarder) {
+            [$localPart, $domain] = array_pad(explode('@', (string) ($forwarder['source'] ?? ''), 2), 2, '');
+            $source = EmailAddress::build($localPart, $domain);
+
+            $destination = (string) ($forwarder['destination'] ?? '');
+
+            if (! filter_var($destination, FILTER_VALIDATE_EMAIL)) {
+                throw new InvalidArgumentException("Destino de encaminhamento inválido: {$destination}");
+            }
+
+            return ['source' => $source, 'destination' => $destination];
+        }, $payload['forwarders'] ?? []);
+
+        $bundle = MailStateBundle::render($domains, $mailboxes, $forwarders);
         $this->processRunner->syncMailState($bundle);
 
-        return ['domains' => count($domains), 'mailboxes' => count($mailboxes)];
+        return ['domains' => count($domains), 'mailboxes' => count($mailboxes), 'forwarders' => count($forwarders)];
     }
 }

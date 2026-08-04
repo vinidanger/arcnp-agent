@@ -540,9 +540,9 @@ Linux de verdade) — a caixa fica em Maildir dentro do próprio home da
 conta de hospedagem dona do domínio (`/home/{usuario}/mail/{domínio}/{caixa}/Maildir`),
 então o espaço já entra na mesma conta que o `disk.usage` (seção 18)
 mede — sem sistema de cota separado. O Painel manda o estado COMPLETO
-do servidor (todo domínio com e-mail ativo + toda caixa) a cada
-mudança; o Agent reescreve os 5 arquivos de mapeamento inteiros — mesmo
-padrão do cron/SSH/DNS.
+do servidor (todo domínio com e-mail ativo + toda caixa + todo
+encaminhamento) a cada mudança; o Agent reescreve os 6 arquivos de
+mapeamento inteiros — mesmo padrão do cron/SSH/DNS.
 
 ```
 dnf install -y postfix dovecot
@@ -557,6 +557,7 @@ smtpd_banner = $myhostname ESMTP
 
 virtual_mailbox_domains = hash:/etc/postfix/virtual_domains
 virtual_mailbox_maps = hash:/etc/postfix/virtual_mailbox_maps
+virtual_alias_maps = hash:/etc/postfix/virtual_alias_maps
 virtual_mailbox_base = /home
 virtual_uid_maps = hash:/etc/postfix/virtual_uid_maps
 virtual_gid_maps = hash:/etc/postfix/virtual_gid_maps
@@ -908,3 +909,28 @@ vhost do Painel e `upload_max_filesize`/`post_max_size` do pool PHP
 que ele usa), senão um arquivo grande é rejeitado ANTES de sequer
 chegar no Agent, com o mesmo sintoma (erro genérico de conexão no
 navegador).
+
+## 27. Encaminhamentos de e-mail (forwarders)
+
+Reaproveita a mesma sincronização de estado da seção 22 — o bundle
+ganhou uma 6ª seção (`POSTFIX_VIRTUAL_ALIAS_MAPS`), instalada em
+`/etc/postfix/virtual_alias_maps`. Servidor que já tem e-mail
+configurado (instalação anterior à seção 22 acima incluir essa
+diretiva) precisa da diretiva nova no `main.cf` — sem ela, o Postfix
+ignora esse arquivo e o encaminhamento simplesmente não funciona,
+sem erro nenhum:
+
+```
+touch /etc/postfix/virtual_alias_maps
+postmap /etc/postfix/virtual_alias_maps
+postconf -e 'virtual_alias_maps = hash:/etc/postfix/virtual_alias_maps'
+postfix check
+systemctl reload postfix
+```
+
+O `touch`+`postmap` vazio vem antes da diretiva no `main.cf` de
+propósito — sem o `.db` existir, `postfix check`/`reload` falha
+("table hash:... no such file") assim que a diretiva referenciar um
+arquivo inexistente. Dali em diante, todo `mail.sync_state` (qualquer
+criação/remoção de caixa, domínio ou encaminhamento) já reescreve e
+refaz o `postmap` desse arquivo sozinho.
