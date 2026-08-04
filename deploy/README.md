@@ -1312,3 +1312,133 @@ negociado, envie um arquivo e confira que o dono (`ls -l`) bate com o
 usuário Linux da conta. Apague a conta e confirme que o login para de
 funcionar **sem reiniciar o `vsftpd`** — se isso não acontecer, algo
 no PAM/banco de usuários está diferente do esperado.
+
+## 34. Terminal web (ttyd)
+
+**Decisão de arquitetura**: em vez de um `ttyd` por conta (gerenciar N
+processos, N portas), um `ttyd` só pro servidor inteiro — mesmo padrão
+do phpMyAdmin/webmail (seções 15/24): uma porta fixa
+(`config('hosting.terminal_port')` no Painel, `8446` por padrão),
+pública, um serviço só. O terminal em si só embrulha `ssh -t
+localhost` — quem autentica de verdade é o **sshd**, com a senha de
+"Acesso SSH" que a conta já tem hoje. Nenhum sistema de credencial
+novo.
+
+**Achado de segurança da pesquisa antes de implementar**: `ttyd` não
+tem autenticação nenhuma por padrão (é literalmente uma CVE conhecida,
+CVE-2021-34182, CVSS 9.8, "sem autenticação por padrão"). E como o
+comando embrulhado conecta em `localhost`, toda tentativa de senha
+chega no sshd vindo de `127.0.0.1` — **isso anula qualquer
+rate-limit por IP** (fail2ban, por exemplo) que normalmente protegeria
+contra força bruta, porque pro sshd todo mundo parece vir do mesmo
+lugar. Por isso o nginx na frente do ttyd faz autenticação HTTP
+Basic (`auth_basic`) — mesmo mecanismo (hash via `openssl passwd`,
+sem precisar do binário `htpasswd`) já usado na proteção de pasta da
+Fase 2 — antes de deixar a requisição sequer chegar no ttyd. Isso
+fecha o problema do CVE (não dá pra alcançar o ttyd sem essa senha
+antes), mas **não elimina totalmente** o problema do fail2ban cego
+(quem já tem a senha HTTP ainda tenta senhas de conta via localhost)
+— o `MaxAuthTries` padrão do sshd (6 tentativas por conexão) e o
+tempo curto de exposição real (só quem já é admin/cliente logado no
+Painel vê o link) mitigam, mas não é o mesmo nível de proteção de uma
+conexão SSH normal vinda de fora. Documentado aqui pra não fingir que
+o risco é zero.
+
+```
+dnf install -y epel-release
+dnf install -y ttyd
+
+chmod +x scripts/terminal-login.sh
+```
+
+`/etc/systemd/system/ttyd.service` — roda como `nobody` (sem
+privilégio nenhum) e só escuta em loopback (`-i 127.0.0.1`, nunca
+exposto direto, só via o proxy nginx abaixo):
+
+```
+cat > /etc/systemd/system/ttyd.service << 'EOF'
+[Unit]
+Description=ttyd - terminal web (Arcn Panel)
+After=network.target sshd.service
+
+[Service]
+ExecStart=/usr/bin/ttyd -p 7681 -i 127.0.0.1 -W -s 1 /opt/arcnp-agent/scripts/terminal-login.sh
+Restart=on-failure
+User=nobody
+Group=nobody
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now ttyd
+```
+
+(`-W` é obrigatório — sem ele o ttyd é só leitura, o cliente não
+consegue digitar nada. `-s 1` manda SIGHUP no processo `ssh` quando o
+navegador desconecta, encerrando a sessão limpo.)
+
+Certificado autoassinado — mesma lógica do FTP (seção 33), sem
+precisar de domínio, conecta direto no IP:
+
+```
+openssl req -x509 -nodes -newkey rsa:2048 \
+  -keyout /etc/nginx/terminal.key \
+  -out /etc/nginx/terminal.crt \
+  -days 3650 -subj "/CN=terminal"
+chmod 0600 /etc/nginx/terminal.key
+```
+
+Senha HTTP Basic — escolha uma senha forte, gere o hash e cole no
+lugar de `HASH_AQUI`:
+
+```
+openssl passwd -6
+# copia o hash impresso e usa na linha abaixo
+echo 'terminal:HASH_AQUI' > /etc/nginx/terminal.htpasswd
+```
+
+`/etc/nginx/conf.d/_terminal.conf` (prefixo `_` de propósito, pra não
+misturar com os vhosts `{domínio}.conf` de cada conta):
+
+```
+cat > /etc/nginx/conf.d/_terminal.conf << 'EOF'
+server {
+    listen 8446 ssl;
+    listen [::]:8446 ssl;
+
+    ssl_certificate /etc/nginx/terminal.crt;
+    ssl_certificate_key /etc/nginx/terminal.key;
+
+    auth_basic "Terminal";
+    auth_basic_user_file /etc/nginx/terminal.htpasswd;
+
+    location / {
+        proxy_pass http://127.0.0.1:7681;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 3600s;
+    }
+}
+EOF
+
+nginx -t
+systemctl reload nginx
+```
+
+Firewall:
+
+```
+firewall-cmd --permanent --add-port=8446/tcp
+firewall-cmd --reload
+```
+
+**Teste pós-deploy**: acesse `https://{IP_DO_SERVIDOR}:8446` — o
+navegador deve pedir a senha HTTP Basic primeiro (aviso de certificado
+autoassinado esperado, aceita); depois disso, o terminal abre pedindo
+"Usuário:" — digite o `linux_username` de uma conta com "Acesso SSH"
+ativado, depois a senha SSH dela. Confirme que `Ctrl+C` e redimensionar
+a janela do navegador funcionam normalmente dentro do terminal.
