@@ -12,6 +12,7 @@ use App\Actions\Demo\DemoAsyncAction;
 use App\Actions\Demo\HealthCheckAction;
 use App\Actions\Disk\DiskUsageAction;
 use App\Actions\Dns\CreateDnsZoneAction;
+use App\Actions\Ftp\SyncFtpAccountsAction;
 use App\Actions\Dns\DeleteDnsZoneAction;
 use App\Actions\Dns\UpdateDnsZoneRecordsAction;
 use App\Actions\Files\CompressFilesAction;
@@ -105,6 +106,7 @@ class ActionRegistry
         'mail.sync_dkim' => SyncMailDkimAction::class,
         'mail.delete_dkim' => DeleteMailDkimAction::class,
         'mail.tail_log' => TailMailLogAction::class,
+        'ftp.sync_state' => SyncFtpAccountsAction::class,
     ];
 
     public static function resolve(string $action): AgentAction

@@ -8,6 +8,8 @@ return [
     'home_base_dir' => '/home',
     'nginx_conf_dir' => '/etc/nginx/conf.d',
     'htpasswd_dir' => '/etc/nginx/htpasswd',
+    'ftp_virtual_users_dir' => '/etc/vsftpd/virtual_users',
+    'ftp_user_conf_dir' => '/etc/vsftpd/user_conf',
     'default_php_version' => env('AGENT_DEFAULT_PHP_VERSION', '8.3'),
 
     /*

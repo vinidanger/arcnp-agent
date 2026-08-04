@@ -1150,3 +1150,127 @@ visudo -c
 
 (o `install` acima já reinstala o sudoers inteiro com a linha nova do
 `tail-log.sh` — mesmo comando de sempre, não é um passo extra.)
+
+## 33. Contas de FTP (vsftpd, usuários virtuais)
+
+Diferente de todo o resto — **sem sudo, sem script novo em `scripts/`**.
+`SyncFtpAccountsAction` (ação `ftp.sync_state`) escreve tudo direto,
+mesmo espírito do `CreateVirtualHostAction`: os diretórios de saída
+são group-writable pro usuário do Agent, só a instalação inicial do
+pacote/serviço (abaixo) exige root, uma vez só.
+
+Usuário virtual = mapeado pro UID do usuário Linux da própria conta
+(via `guest_username` no config por usuário) — arquivo enviado por FTP
+fica com o mesmo dono que arquivo criado pelo gerenciador de
+arquivos/SSH. **Nenhum restart/reload do vsftpd é necessário** pra
+criar, remover ou trocar senha de conta — o banco de usuários virtuais
+é consultado pelo PAM a cada autenticação, e o config por usuário é
+lido a cada login.
+
+```
+dnf install -y vsftpd libdb-utils
+
+mkdir -p /etc/vsftpd/virtual_users /etc/vsftpd/user_conf
+chgrp arcnpagent /etc/vsftpd/virtual_users /etc/vsftpd/user_conf
+chmod 2770 /etc/vsftpd/virtual_users /etc/vsftpd/user_conf
+```
+
+(`2770`, sem bit de leitura pra "outros" — diferente do `nginx_conf_dir`
+da seção 5, aqui o conteúdo é sensível: hash de senha e caminho interno
+da conta, e contas desse painel têm acesso SSH — não pode vazar pra
+outros usuários do sistema.)
+
+Banco de usuários virtuais vazio inicial (a primeira sincronização
+real do Painel substitui):
+
+```
+db_load -T -t hash -f /dev/null /etc/vsftpd/virtual_users/virtual_users.db
+chgrp arcnpagent /etc/vsftpd/virtual_users/virtual_users.db
+chmod 0600 /etc/vsftpd/virtual_users/virtual_users.db
+```
+
+`/etc/pam.d/vsftpd-virtual` — **exatamente essas linhas, nunca
+`include system-auth`** (senão contas de sistema, inclusive root,
+ficam alcançáveis por FTP):
+
+```
+auth    required pam_userdb.so db=/etc/vsftpd/virtual_users/virtual_users crypt=crypt
+account required pam_userdb.so db=/etc/vsftpd/virtual_users/virtual_users crypt=crypt
+session required pam_loginuid.so
+```
+
+(o `db=` é o caminho **sem** o sufixo `.db` — o `pam_userdb.so`
+completa sozinho.)
+
+`/etc/vsftpd/vsftpd.conf`:
+
+```
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+guest_enable=YES
+guest_username=nobody
+virtual_use_local_privs=YES
+chroot_local_user=YES
+allow_writeable_chroot=YES
+user_config_dir=/etc/vsftpd/user_conf
+pam_service_name=vsftpd-virtual
+local_umask=022
+seccomp_sandbox=NO
+
+pasv_enable=YES
+pasv_min_port=30000
+pasv_max_port=30999
+
+ssl_enable=YES
+force_local_logins_ssl=YES
+force_local_data_ssl=YES
+require_ssl_reuse=NO
+ssl_tlsv1_2=YES
+ssl_sslv2=NO
+ssl_sslv3=NO
+rsa_cert_file=/etc/letsencrypt/live/ftp.SEUDOMINIO.com/fullchain.pem
+rsa_private_key_file=/etc/letsencrypt/live/ftp.SEUDOMINIO.com/privkey.pem
+```
+
+(`allow_writeable_chroot=YES` normalmente enfraquece a segurança — mas
+cada usuário virtual aqui já mapeia pra um UID real e ISOLADO que já é
+dono legítimo de toda a árvore, não é o cenário de usuário anônimo
+compartilhado que a proteção original mirava.)
+
+Certificado — mesmo padrão do `mail_hostname` da seção 22 (hostname
+próprio, não é o domínio de nenhuma conta, porque uma instância vsftpd
+só serve UM certificado pra todas as contas). Cadastrar o hostname em
+Admin > Servidores > editar > "Hostname de FTP":
+
+```
+systemctl stop nginx
+certbot certonly --standalone -d ftp.SEUDOMINIO.com --agree-tos -m SEU@EMAIL.com --no-eff-email
+systemctl start nginx
+```
+
+Firewall — porta de controle + range de portas passivas (obrigatório:
+`nf_conntrack_ftp` só entende o canal de controle em texto claro, e
+FTPS criptografa ele, então não ajuda aqui):
+
+```
+firewall-cmd --permanent --add-service=ftp
+firewall-cmd --permanent --add-port=30000-30999/tcp
+firewall-cmd --reload
+setsebool -P ftpd_full_access=1 ftpd_use_passive_mode=1
+```
+
+```
+systemctl enable --now vsftpd
+```
+
+**Recomendação (não bloqueante)**: `fail2ban` com o jail padrão de
+`vsftpd` — esse serviço fica exposto publicamente e não tem
+rate-limit nativo de tentativa de autenticação.
+
+**Teste pós-deploy**: crie uma conta de teste pelo Painel, conecte com
+um cliente FTPS real (FileZilla, por exemplo) confirmando que o TLS é
+negociado, envie um arquivo e confira que o dono (`ls -l`) bate com o
+usuário Linux da conta. Apague a conta e confirme que o login para de
+funcionar **sem reiniciar o `vsftpd`** — se isso não acontecer, algo
+no PAM/banco de usuários está diferente do esperado.
