@@ -565,6 +565,177 @@ class ProcessRunner
         return trim($result->output()) ?: trim($result->errorOutput()) ?: 'unknown';
     }
 
+    /**
+     * Consulta de status de serviço não exige privilégio nenhum no
+     * systemd — sem sudo, mesmo motivo de appUnitStatus(). Lista fixa,
+     * definida dentro de CollectServerInfoAction (nunca vem do Painel),
+     * então não tem superfície de injeção. "systemctl is-active" aceita
+     * vários nomes de uma vez e devolve uma linha de status por unit,
+     * na mesma ordem — mesmo com alguns inativos (exit code != 0 nesse
+     * caso, por isso não usa exec()/->failed(), só lê a saída como veio).
+     *
+     * @param  list<string>  $units
+     * @return array<string, string>
+     */
+    public function serviceStatuses(array $units): array
+    {
+        if ($units === []) {
+            return [];
+        }
+
+        $result = Process::timeout(15)->run(array_merge(['systemctl', 'is-active'], $units));
+
+        $lines = array_pad(explode("\n", trim($result->output())), count($units), 'unknown');
+
+        return array_combine($units, array_map(fn ($line) => trim($line) ?: 'unknown', array_slice($lines, 0, count($units))));
+    }
+
+    /**
+     * Hardware/SO — só leitura, sem sudo, sem nenhum input externo
+     * (não recebe parâmetro do Painel), então não tem superfície de
+     * injeção. Best-effort peça por peça, igual o heartbeat: uma falha
+     * isolada (ex.: /proc/cpuinfo ausente num container) não derruba a
+     * coleta inteira, só aquele campo específico fica null/vazio.
+     *
+     * @return array<string, mixed>
+     */
+    public function collectSystemInfo(): array
+    {
+        return [
+            'os' => $this->readOsPrettyName(),
+            'kernel' => $this->readCommandOutput(['uname', '-r']),
+            'architecture' => $this->readCommandOutput(['uname', '-m']),
+            'cpu_model' => $this->readCpuModel(),
+            'cpu_cores' => $this->readCpuCores(),
+            'memory_mb' => $this->readMemoryTotalMb(),
+            'uptime_seconds' => $this->readUptimeSeconds(),
+            'ip_addresses' => $this->readIpAddresses(),
+            'disks' => $this->readDisks(),
+        ];
+    }
+
+    private function readCommandOutput(array $command): ?string
+    {
+        $result = Process::timeout(10)->run($command);
+
+        return $result->successful() ? trim($result->output()) ?: null : null;
+    }
+
+    private function readOsPrettyName(): ?string
+    {
+        if (! is_readable('/etc/os-release')) {
+            return null;
+        }
+
+        foreach (file('/etc/os-release') as $line) {
+            if (preg_match('/^PRETTY_NAME="?(.*?)"?$/', trim($line), $m)) {
+                return $m[1];
+            }
+        }
+
+        return null;
+    }
+
+    private function readCpuModel(): ?string
+    {
+        if (! is_readable('/proc/cpuinfo')) {
+            return null;
+        }
+
+        foreach (file('/proc/cpuinfo') as $line) {
+            if (preg_match('/^model name\s*:\s*(.+)$/', trim($line), $m)) {
+                return trim($m[1]);
+            }
+        }
+
+        return null;
+    }
+
+    private function readCpuCores(): ?int
+    {
+        if (! is_readable('/proc/cpuinfo')) {
+            return null;
+        }
+
+        $count = 0;
+
+        foreach (file('/proc/cpuinfo') as $line) {
+            if (preg_match('/^processor\s*:/', $line)) {
+                $count++;
+            }
+        }
+
+        return $count ?: null;
+    }
+
+    private function readMemoryTotalMb(): ?int
+    {
+        if (! is_readable('/proc/meminfo')) {
+            return null;
+        }
+
+        foreach (file('/proc/meminfo') as $line) {
+            if (preg_match('/^MemTotal:\s+(\d+)/', $line, $m)) {
+                return (int) round(((int) $m[1]) / 1024);
+            }
+        }
+
+        return null;
+    }
+
+    private function readUptimeSeconds(): ?int
+    {
+        if (! is_readable('/proc/uptime')) {
+            return null;
+        }
+
+        $contents = trim((string) file_get_contents('/proc/uptime'));
+        $parts = explode(' ', $contents);
+
+        return isset($parts[0]) ? (int) round((float) $parts[0]) : null;
+    }
+
+    /** @return list<string> */
+    private function readIpAddresses(): array
+    {
+        $output = $this->readCommandOutput(['hostname', '-I']);
+
+        return $output ? array_values(array_filter(explode(' ', $output))) : [];
+    }
+
+    /**
+     * @return list<array{filesystem: string, mount: string, size: string, used: string, available: string, percent: string}>
+     */
+    private function readDisks(): array
+    {
+        $result = Process::timeout(10)->run(['df', '-hP']);
+
+        if (! $result->successful()) {
+            return [];
+        }
+
+        $disks = [];
+
+        foreach (array_slice(explode("\n", trim($result->output())), 1) as $line) {
+            $columns = preg_split('/\s+/', trim($line));
+
+            if (count($columns) < 6 || ! str_starts_with($columns[0], '/dev/')) {
+                continue;
+            }
+
+            $disks[] = [
+                'filesystem' => $columns[0],
+                'size' => $columns[1],
+                'used' => $columns[2],
+                'available' => $columns[3],
+                'percent' => $columns[4],
+                'mount' => $columns[5],
+            ];
+        }
+
+        return $disks;
+    }
+
     private function exec(array $command, int $timeout = 30): void
     {
         $result = Process::timeout($timeout)->run($command);

@@ -37,6 +37,7 @@ use App\Actions\Php\CreatePhpFpmPoolAction;
 use App\Actions\Php\DeletePhpFpmPoolAction;
 use App\Actions\Php\SwitchPhpVersionAction;
 use App\Actions\Php\UpdatePhpFpmPoolSettingsAction;
+use App\Actions\Server\CollectServerInfoAction;
 use App\Actions\Ssh\SetSshAccessAction;
 use App\Actions\Ssh\SetSshPasswordAction;
 use App\Actions\Ssh\SyncSshKeysAction;
@@ -119,6 +120,7 @@ class ActionRegistry
         'mail.delete_dkim' => DeleteMailDkimAction::class,
         'mail.tail_log' => TailMailLogAction::class,
         'ftp.sync_state' => SyncFtpAccountsAction::class,
+        'server.collect_info' => CollectServerInfoAction::class,
     ];
 
     public static function resolve(string $action): AgentAction
