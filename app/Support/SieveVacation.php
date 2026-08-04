@@ -3,22 +3,22 @@
 namespace App\Support;
 
 /**
- * Monta o script Sieve de "aviso de férias" (RFC 5230) por caixa — cada
- * caixa habilitada ganha seu próprio .dovecot.sieve, compilado com
- * sievec (ver manage-mail.sh). :days 1 é o intervalo mínimo entre
- * respostas automáticas pro MESMO remetente, evita ping-pong de
- * autoresposta quando duas caixas com férias ativa trocam e-mail entre si.
+ * Monta só o BLOCO "vacation" (RFC 5230), sem a linha "require" — quem
+ * monta o script inteiro por caixa é App\Support\MailboxSieveScript,
+ * que combina esse bloco com os de MailFilterSieve (um script só por
+ * caixa, já que o Dovecot só lê um .dovecot.sieve por vez). :days 1 é
+ * o intervalo mínimo entre respostas automáticas pro MESMO remetente,
+ * evita ping-pong de autoresposta quando duas caixas com férias ativa
+ * trocam e-mail entre si.
  */
 class SieveVacation
 {
-    public static function render(string $subject, string $message): string
+    public static function renderBlock(string $subject, string $message): string
     {
         $subject = self::escapeQuoted($subject);
         $message = self::dotStuff(str_replace("\r\n", "\n", trim($message)));
 
         return <<<SIEVE
-        require ["vacation"];
-
         if true {
             vacation
                 :subject "{$subject}"
@@ -28,7 +28,6 @@ class SieveVacation
         .
                 ;
         }
-
         SIEVE;
     }
 

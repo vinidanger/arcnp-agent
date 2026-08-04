@@ -23,7 +23,7 @@ case "$OPERATION" in
             file { print > file }
         '
 
-        for section in POSTFIX_VIRTUAL_DOMAINS POSTFIX_VIRTUAL_MAILBOX_MAPS POSTFIX_VIRTUAL_ALIAS_MAPS POSTFIX_VIRTUAL_UID_MAPS POSTFIX_VIRTUAL_GID_MAPS DOVECOT_USERS SIEVE_VACATION; do
+        for section in POSTFIX_VIRTUAL_DOMAINS POSTFIX_VIRTUAL_MAILBOX_MAPS POSTFIX_VIRTUAL_ALIAS_MAPS POSTFIX_VIRTUAL_UID_MAPS POSTFIX_VIRTUAL_GID_MAPS DOVECOT_USERS SIEVE_SCRIPTS; do
             if [[ ! -f "$TMP/$section" ]]; then
                 echo "Bundle inválido: faltando seção $section" >&2
                 exit 1
@@ -56,26 +56,29 @@ case "$OPERATION" in
         postmap /etc/postfix/virtual_uid_maps
         postmap /etc/postfix/virtual_gid_maps
 
-        # Aviso de férias: cada linha é "home:uid:gid:script_base64".
-        # Compila com sievec (Dovecot só executa o .svbin compilado, não
-        # o .sieve fonte diretamente em produção).
-        declare -A VACATION_HOMES=()
+        # Script Sieve por caixa (filtros + aviso de férias combinados
+        # num script só, ver App\Support\MailboxSieveScript — o Dovecot
+        # só lê um .dovecot.sieve por vez). Cada linha é
+        # "home:uid:gid:script_base64". Compila com sievec (Dovecot só
+        # executa o .svbin compilado, não o .sieve fonte em produção).
+        declare -A SIEVE_HOMES=()
         while IFS=: read -r home uid gid script_b64; do
             [[ -z "$home" ]] && continue
             echo "$script_b64" | base64 -d > "$home/.dovecot.sieve"
             chown "$uid:$gid" "$home/.dovecot.sieve"
             sievec "$home/.dovecot.sieve"
             chown "$uid:$gid" "$home/.dovecot.svbin"
-            VACATION_HOMES["$home"]=1
-        done < "$TMP/SIEVE_VACATION"
+            SIEVE_HOMES["$home"]=1
+        done < "$TMP/SIEVE_SCRIPTS"
 
-        # Quem desativou o aviso de férias não aparece na seção acima —
-        # sem essa limpeza o .svbin antigo continuaria no disco e o
-        # Dovecot manteria respondendo, porque ele só olha se o arquivo
-        # existe, não sabe de "habilitado"/"desabilitado" no Painel.
+        # Quem desativou o aviso de férias E apagou todo filtro não
+        # aparece na seção acima — sem essa limpeza o .svbin antigo
+        # continuaria no disco e o Dovecot manteria aplicando, porque
+        # ele só olha se o arquivo existe, não sabe do que foi
+        # desativado no Painel.
         while IFS=: read -r email hash uid gid gecos home shell extra; do
             [[ -z "$email" ]] && continue
-            if [[ -z "${VACATION_HOMES[$home]:-}" ]]; then
+            if [[ -z "${SIEVE_HOMES[$home]:-}" ]]; then
                 rm -f "$home/.dovecot.sieve" "$home/.dovecot.svbin"
             fi
         done < "$TMP/DOVECOT_USERS"

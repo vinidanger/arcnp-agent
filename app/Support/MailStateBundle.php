@@ -12,11 +12,11 @@ namespace App\Support;
  * @param list<string> $domains
  * @param list<array{email: string, username: string, domain: string, local_part: string, password_hash: string, uid: int, gid: int}> $mailboxes
  * @param list<array{source: string, destination: string}> $forwarders
- * @param list<array{email: string, username: string, domain: string, local_part: string, uid: int, gid: int, subject: string, message: string}> $vacations
+ * @param list<array{username: string, domain: string, local_part: string, uid: int, gid: int, vacation: array{subject: string, message: string}|null, filters: list<array{field: string, value: string, action: string, folder: ?string}>}> $sieveMailboxes
  */
 class MailStateBundle
 {
-    public static function render(array $domains, array $mailboxes, array $forwarders = [], array $vacations = []): string
+    public static function render(array $domains, array $mailboxes, array $forwarders = [], array $sieveMailboxes = []): string
     {
         $virtualDomains = implode("\n", array_map(fn (string $d) => "{$d} OK", $domains));
 
@@ -42,17 +42,24 @@ class MailStateBundle
         $aliasMaps = array_map(fn ($f) => "{$f['source']} {$f['destination']}", $forwarders);
 
         // Cada linha é "home:uid:gid:script_base64" — base64 nunca tem
-        // ":", então dá pra usar como delimitador sem ambiguidade. Só
-        // entram aqui as caixas com aviso de férias HABILITADO; o
-        // manage-mail.sh apaga o .sieve de quem não aparecer nesta
-        // seção (senão desativar no Painel não pararia o autoresposta,
-        // já que o Dovecot só olha se o arquivo existe no disco).
-        $sieveVacations = array_map(function (array $vacation) {
-            $home = self::mailboxHome($vacation);
-            $script = base64_encode(SieveVacation::render($vacation['subject'], $vacation['message']));
+        // ":", então dá pra usar como delimitador sem ambiguidade. Um
+        // script SÓ por caixa (filtros + aviso de férias combinados,
+        // ver MailboxSieveScript — o Dovecot só lê um .dovecot.sieve
+        // por vez). Caixa sem filtro nenhum e sem aviso de férias
+        // habilitado não entra aqui; o manage-mail.sh apaga o .sieve de
+        // quem não aparecer nesta seção (senão desativar no Painel não
+        // pararia nada, já que o Dovecot só olha se o arquivo existe).
+        $sieveScripts = [];
+        foreach ($sieveMailboxes as $mailbox) {
+            $script = MailboxSieveScript::render($mailbox['filters'], $mailbox['vacation']);
 
-            return "{$home}:{$vacation['uid']}:{$vacation['gid']}:{$script}";
-        }, $vacations);
+            if ($script === '') {
+                continue;
+            }
+
+            $home = self::mailboxHome($mailbox);
+            $sieveScripts[] = "{$home}:{$mailbox['uid']}:{$mailbox['gid']}:".base64_encode($script);
+        }
 
         return self::section('POSTFIX_VIRTUAL_DOMAINS', $virtualDomains)
             .self::section('POSTFIX_VIRTUAL_MAILBOX_MAPS', implode("\n", $mailboxMaps))
@@ -60,7 +67,7 @@ class MailStateBundle
             .self::section('POSTFIX_VIRTUAL_UID_MAPS', implode("\n", $uidMaps))
             .self::section('POSTFIX_VIRTUAL_GID_MAPS', implode("\n", $gidMaps))
             .self::section('DOVECOT_USERS', implode("\n", $dovecotUsers))
-            .self::section('SIEVE_VACATION', implode("\n", $sieveVacations))
+            .self::section('SIEVE_SCRIPTS', implode("\n", $sieveScripts))
             ."===END===\n";
     }
 

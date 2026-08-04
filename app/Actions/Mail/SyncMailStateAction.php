@@ -63,37 +63,72 @@ class SyncMailStateAction implements AgentAction
             return ['source' => $source, 'destination' => $destination];
         }, $payload['forwarders'] ?? []);
 
-        $vacations = array_map(function (array $vacation) {
-            $username = LinuxUsername::validate($vacation['username'] ?? '');
-            $domain = DomainName::validate($vacation['domain'] ?? '');
-            $localPart = EmailAddress::validateLocalPart($vacation['local_part'] ?? '');
-            $subject = trim((string) ($vacation['subject'] ?? ''));
-            $message = trim((string) ($vacation['message'] ?? ''));
+        $sieveMailboxes = array_map(function (array $entry) {
+            $username = LinuxUsername::validate($entry['username'] ?? '');
+            $domain = DomainName::validate($entry['domain'] ?? '');
+            $localPart = EmailAddress::validateLocalPart($entry['local_part'] ?? '');
 
-            if ($subject === '' || $message === '') {
-                throw new InvalidArgumentException('Assunto e mensagem do aviso de férias são obrigatórios.');
+            $vacation = null;
+            if (($entry['vacation'] ?? null) !== null) {
+                $subject = trim((string) ($entry['vacation']['subject'] ?? ''));
+                $message = trim((string) ($entry['vacation']['message'] ?? ''));
+
+                if ($subject === '' || $message === '') {
+                    throw new InvalidArgumentException('Assunto e mensagem do aviso de férias são obrigatórios.');
+                }
+
+                $vacation = ['subject' => $subject, 'message' => $message];
             }
 
+            $filters = array_map(function (array $filter) {
+                $field = (string) ($filter['field'] ?? '');
+                $value = trim((string) ($filter['value'] ?? ''));
+                $action = (string) ($filter['action'] ?? '');
+                $folder = $filter['folder'] ?? null;
+
+                if (! in_array($field, ['from', 'subject', 'to'], true)) {
+                    throw new InvalidArgumentException("Campo de filtro inválido: {$field}");
+                }
+
+                if ($value === '') {
+                    throw new InvalidArgumentException('Valor de filtro vazio.');
+                }
+
+                if (! in_array($action, ['discard', 'move_to_folder'], true)) {
+                    throw new InvalidArgumentException("Ação de filtro inválida: {$action}");
+                }
+
+                if ($action === 'move_to_folder' && trim((string) $folder) === '') {
+                    throw new InvalidArgumentException('Pasta de destino obrigatória pra ação "mover pra pasta".');
+                }
+
+                return [
+                    'field' => $field,
+                    'value' => $value,
+                    'action' => $action,
+                    'folder' => $action === 'move_to_folder' ? trim((string) $folder) : null,
+                ];
+            }, $entry['filters'] ?? []);
+
             return [
-                'email' => EmailAddress::build($localPart, $domain),
                 'username' => $username,
                 'domain' => $domain,
                 'local_part' => $localPart,
                 'uid' => $this->processRunner->userId($username),
                 'gid' => $this->processRunner->groupId($username),
-                'subject' => $subject,
-                'message' => $message,
+                'vacation' => $vacation,
+                'filters' => $filters,
             ];
-        }, $payload['vacations'] ?? []);
+        }, $payload['sieve_mailboxes'] ?? []);
 
-        $bundle = MailStateBundle::render($domains, $mailboxes, $forwarders, $vacations);
+        $bundle = MailStateBundle::render($domains, $mailboxes, $forwarders, $sieveMailboxes);
         $this->processRunner->syncMailState($bundle);
 
         return [
             'domains' => count($domains),
             'mailboxes' => count($mailboxes),
             'forwarders' => count($forwarders),
-            'vacations' => count($vacations),
+            'sieve_mailboxes' => count($sieveMailboxes),
         ];
     }
 }
