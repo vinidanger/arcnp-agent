@@ -63,9 +63,37 @@ class SyncMailStateAction implements AgentAction
             return ['source' => $source, 'destination' => $destination];
         }, $payload['forwarders'] ?? []);
 
-        $bundle = MailStateBundle::render($domains, $mailboxes, $forwarders);
+        $vacations = array_map(function (array $vacation) {
+            $username = LinuxUsername::validate($vacation['username'] ?? '');
+            $domain = DomainName::validate($vacation['domain'] ?? '');
+            $localPart = EmailAddress::validateLocalPart($vacation['local_part'] ?? '');
+            $subject = trim((string) ($vacation['subject'] ?? ''));
+            $message = trim((string) ($vacation['message'] ?? ''));
+
+            if ($subject === '' || $message === '') {
+                throw new InvalidArgumentException('Assunto e mensagem do aviso de férias são obrigatórios.');
+            }
+
+            return [
+                'email' => EmailAddress::build($localPart, $domain),
+                'username' => $username,
+                'domain' => $domain,
+                'local_part' => $localPart,
+                'uid' => $this->processRunner->userId($username),
+                'gid' => $this->processRunner->groupId($username),
+                'subject' => $subject,
+                'message' => $message,
+            ];
+        }, $payload['vacations'] ?? []);
+
+        $bundle = MailStateBundle::render($domains, $mailboxes, $forwarders, $vacations);
         $this->processRunner->syncMailState($bundle);
 
-        return ['domains' => count($domains), 'mailboxes' => count($mailboxes), 'forwarders' => count($forwarders)];
+        return [
+            'domains' => count($domains),
+            'mailboxes' => count($mailboxes),
+            'forwarders' => count($forwarders),
+            'vacations' => count($vacations),
+        ];
     }
 }

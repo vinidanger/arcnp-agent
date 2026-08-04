@@ -934,3 +934,118 @@ propósito — sem o `.db` existir, `postfix check`/`reload` falha
 arquivo inexistente. Dali em diante, todo `mail.sync_state` (qualquer
 criação/remoção de caixa, domínio ou encaminhamento) já reescreve e
 refaz o `postmap` desse arquivo sozinho.
+
+## 28. Autorresposta / aviso de férias (vacation) — MUDA O CAMINHO DE ENTREGA DE E-MAIL
+
+**Atenção**: diferente de toda seção anterior, este item muda como o
+Postfix ENTREGA e-mail pra todas as caixas do servidor, não só
+adiciona um arquivo novo. Ler inteiro antes de aplicar, e aplicar em
+horário de baixo tráfego — tem um passo de risco real (troca do
+`virtual_transport`) com rollback documentado no fim.
+
+**Por quê**: aviso de férias é implementado via Sieve (RFC 5230,
+plugin `vacation`), e Sieve só roda dentro do agente de entrega final
+do Dovecot (LDA ou LMTP) — nunca dentro do transporte nativo do
+Postfix (`virtual_transport = virtual`, o que este servidor usa hoje,
+seção 22). Não dá pra ter aviso de férias sem o Postfix entregar via
+Dovecot. A troca é: Postfix para de escrever direto no Maildir e passa
+a entregar via LMTP num socket do Dovecot, que aí sim escreve no
+Maildir E roda o Sieve de cada caixa antes.
+
+### 28.1. Instalar o Pigeonhole (plugin Sieve do Dovecot)
+
+```
+dnf install -y dovecot-pigeonhole
+```
+
+### 28.2. Dovecot — habilitar LMTP + Sieve
+
+Editar o mesmo `/etc/dovecot/dovecot.conf` da seção 22:
+
+```
+protocols = imap lmtp
+
+postmaster_address = postmaster@%d
+
+service lmtp {
+    unix_listener /var/spool/postfix/private/dovecot-lmtp {
+        mode = 0600
+        user = postfix
+        group = postfix
+    }
+}
+
+protocol lmtp {
+    mail_plugins = $mail_plugins sieve
+}
+
+plugin {
+    sieve = ~/.dovecot.sieve
+}
+```
+
+`postmaster_address` é obrigatório pro Pigeonhole — é o remetente
+usado em respostas automáticas/bounces gerados pelo próprio Dovecot.
+Troque `%d` (domínio da caixa) se preferir um endereço fixo único.
+
+### 28.3. Postfix — trocar o transporte de entrega
+
+Esse é o passo que muda a entrega de TODAS as caixas do servidor,
+de uma vez, no reload:
+
+```
+postconf -e 'virtual_transport = lmtp:unix:private/dovecot-lmtp'
+postfix check
+systemctl restart dovecot
+systemctl reload postfix
+```
+
+`virtual_uid_maps`/`virtual_gid_maps` continuam declarados no
+`main.cf` (seção 22) mas ficam sem uso — quem passa a decidir
+dono/permissão do Maildir na entrega é o `userdb` do Dovecot
+(`/etc/dovecot/users`, já com uid/gid corretos por linha), não mais o
+transporte nativo do Postfix. Não precisa remover as diretivas
+antigas, só não fazem mais efeito na entrega.
+
+**Teste antes de considerar concluído**: mande um e-mail de teste pra
+uma caixa existente e confirme que chegou (IMAP ou `mail.sync_state`
+de novo pra qualquer conta) — isso valida que a entrega via LMTP está
+funcionando antes de qualquer cliente notar problema.
+
+### 28.4. Rollback (se a entrega via LMTP quebrar)
+
+Reverte só a linha do transporte — o Sieve/LMTP fica configurado mas
+inerte, sem afetar nada:
+
+```
+postconf -e 'virtual_transport = virtual'
+postfix check
+systemctl reload postfix
+```
+
+E-mail volta a ser entregue do jeito antigo (Postfix nativo,
+seção 22), sem aviso de férias, mas sem risco de perda de mensagem —
+o Postfix guarda em fila local se a entrega falhar, não descarta.
+
+### 28.5. Sincronização (`manage-mail.sh`)
+
+Reaproveita a mesma sincronização de estado das seções 22/27 — o
+bundle ganhou uma 7ª seção (`SIEVE_VACATION`), cada linha no formato
+`home:uid:gid:script_base64` (um script Sieve completo por caixa,
+codificado em base64 porque o conteúdo tem quebras de linha). O
+`manage-mail.sh` decodifica, escreve `{home}/.dovecot.sieve`, compila
+com `sievec` (gera `{home}/.dovecot.svbin` — é o binário que o Dovecot
+de fato executa, não o `.sieve` fonte) e ajusta a posse pro uid/gid da
+caixa. Caixa que teve o aviso de férias desativado no Painel some
+dessa seção no próximo sync, e o script apaga o `.sieve`/`.svbin`
+antigo dela — sem essa limpeza o Dovecot continuaria respondendo
+porque ele só olha se o arquivo existe no disco, não sabe de
+"habilitado" no Painel.
+
+Nenhum sudoers novo — `manage-mail.sh` já tem entrada `NOPASSWD` ampla
+(`scripts/manage-mail.sh *`, ver seção 22), e o `sievec` roda dentro
+do mesmo processo já root via sudo.
+
+### 28.6. Firewall / rede
+
+Nenhuma porta pública nova — o socket LMTP é Unix (`/var/spool/postfix/private/dovecot-lmtp`), só o Postfix local fala com ele, igual o `private/auth` do SASL da seção 22.

@@ -12,10 +12,11 @@ namespace App\Support;
  * @param list<string> $domains
  * @param list<array{email: string, username: string, domain: string, local_part: string, password_hash: string, uid: int, gid: int}> $mailboxes
  * @param list<array{source: string, destination: string}> $forwarders
+ * @param list<array{email: string, username: string, domain: string, local_part: string, uid: int, gid: int, subject: string, message: string}> $vacations
  */
 class MailStateBundle
 {
-    public static function render(array $domains, array $mailboxes, array $forwarders = []): string
+    public static function render(array $domains, array $mailboxes, array $forwarders = [], array $vacations = []): string
     {
         $virtualDomains = implode("\n", array_map(fn (string $d) => "{$d} OK", $domains));
 
@@ -25,7 +26,7 @@ class MailStateBundle
         $dovecotUsers = [];
 
         foreach ($mailboxes as $mailbox) {
-            $home = "/home/{$mailbox['username']}/mail/{$mailbox['domain']}/{$mailbox['local_part']}";
+            $home = self::mailboxHome($mailbox);
             $maildirRelative = "{$mailbox['username']}/mail/{$mailbox['domain']}/{$mailbox['local_part']}/Maildir/";
 
             $mailboxMaps[] = "{$mailbox['email']} {$maildirRelative}";
@@ -40,13 +41,33 @@ class MailStateBundle
         // só redireciona pra outro endereço não pode entrar nele.
         $aliasMaps = array_map(fn ($f) => "{$f['source']} {$f['destination']}", $forwarders);
 
+        // Cada linha é "home:uid:gid:script_base64" — base64 nunca tem
+        // ":", então dá pra usar como delimitador sem ambiguidade. Só
+        // entram aqui as caixas com aviso de férias HABILITADO; o
+        // manage-mail.sh apaga o .sieve de quem não aparecer nesta
+        // seção (senão desativar no Painel não pararia o autoresposta,
+        // já que o Dovecot só olha se o arquivo existe no disco).
+        $sieveVacations = array_map(function (array $vacation) {
+            $home = self::mailboxHome($vacation);
+            $script = base64_encode(SieveVacation::render($vacation['subject'], $vacation['message']));
+
+            return "{$home}:{$vacation['uid']}:{$vacation['gid']}:{$script}";
+        }, $vacations);
+
         return self::section('POSTFIX_VIRTUAL_DOMAINS', $virtualDomains)
             .self::section('POSTFIX_VIRTUAL_MAILBOX_MAPS', implode("\n", $mailboxMaps))
             .self::section('POSTFIX_VIRTUAL_ALIAS_MAPS', implode("\n", $aliasMaps))
             .self::section('POSTFIX_VIRTUAL_UID_MAPS', implode("\n", $uidMaps))
             .self::section('POSTFIX_VIRTUAL_GID_MAPS', implode("\n", $gidMaps))
             .self::section('DOVECOT_USERS', implode("\n", $dovecotUsers))
+            .self::section('SIEVE_VACATION', implode("\n", $sieveVacations))
             ."===END===\n";
+    }
+
+    /** @param array{username: string, domain: string, local_part: string} $entry */
+    private static function mailboxHome(array $entry): string
+    {
+        return "/home/{$entry['username']}/mail/{$entry['domain']}/{$entry['local_part']}";
     }
 
     private static function section(string $name, string $content): string
