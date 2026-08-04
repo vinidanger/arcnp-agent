@@ -1229,8 +1229,8 @@ require_ssl_reuse=NO
 ssl_tlsv1_2=YES
 ssl_sslv2=NO
 ssl_sslv3=NO
-rsa_cert_file=/etc/letsencrypt/live/ftp.SEUDOMINIO.com/fullchain.pem
-rsa_private_key_file=/etc/letsencrypt/live/ftp.SEUDOMINIO.com/privkey.pem
+rsa_cert_file=/etc/vsftpd/ftp.crt
+rsa_private_key_file=/etc/vsftpd/ftp.key
 ```
 
 (`allow_writeable_chroot=YES` normalmente enfraquece a segurança — mas
@@ -1238,16 +1238,29 @@ cada usuário virtual aqui já mapeia pra um UID real e ISOLADO que já é
 dono legítimo de toda a árvore, não é o cenário de usuário anônimo
 compartilhado que a proteção original mirava.)
 
-Certificado — mesmo padrão do `mail_hostname` da seção 22 (hostname
-próprio, não é o domínio de nenhuma conta, porque uma instância vsftpd
-só serve UM certificado pra todas as contas). Cadastrar o hostname em
-Admin > Servidores > editar > "Hostname de FTP":
+Certificado — **autoassinado, de propósito**, diferente do
+`mail_hostname` da seção 22. Let's Encrypt não emite certificado pra
+IP, só pra domínio, e a ideia aqui é o cliente conectar direto no IP
+do servidor, sem precisar reservar um subdomínio só pro FTP nem repetir
+a dança de parar o nginx pro certbot. O cliente FTP mostra um aviso de
+"certificado não confiável" na primeira conexão — normal, aceita/fixa
+uma vez e não pergunta de novo (diferente de HTTPS no navegador, FTP
+não é tão estrito com isso):
 
 ```
-systemctl stop nginx
-certbot certonly --standalone -d ftp.SEUDOMINIO.com --agree-tos -m SEU@EMAIL.com --no-eff-email
-systemctl start nginx
+openssl req -x509 -nodes -newkey rsa:2048 \
+  -keyout /etc/vsftpd/ftp.key \
+  -out /etc/vsftpd/ftp.crt \
+  -days 3650 -subj "/CN=ftp"
+chmod 0600 /etc/vsftpd/ftp.key
 ```
+
+(Se preferir sem aviso nenhum no cliente, dá pra emitir um certificado
+de verdade depois: reserve um subdomínio tipo `ftp.seudominio.com`,
+rode o mesmo `certbot certonly --standalone` da seção 22, aponte
+`rsa_cert_file`/`rsa_private_key_file` pra ele, e cadastre o hostname
+em Admin > Servidores > editar > "Hostname de FTP" — sem isso
+preenchido, o Painel mostra o IP do servidor como forma de conectar.)
 
 Firewall — porta de controle + range de portas passivas (obrigatório:
 `nf_conntrack_ftp` só entende o canal de controle em texto claro, e
