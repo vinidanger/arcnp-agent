@@ -52,6 +52,7 @@ use App\Actions\Web\HostedAppStatusAction;
 use App\Actions\Web\RestartHostedAppAction;
 use App\Actions\Web\SyncFolderProtectionsAction;
 use App\Actions\Web\SyncHotlinkProtectionAction;
+use App\Actions\Web\SyncMimeTypesAction;
 use App\Actions\Web\SyncRedirectsAction;
 use App\Actions\Web\TailDomainLogAction;
 use App\Actions\Web\UpdateVirtualHostPhpVersionAction;
@@ -87,6 +88,7 @@ class ActionRegistry
         'web.sync_folder_protections' => SyncFolderProtectionsAction::class,
         'web.sync_redirects' => SyncRedirectsAction::class,
         'web.sync_hotlink_protection' => SyncHotlinkProtectionAction::class,
+        'web.sync_mime_types' => SyncMimeTypesAction::class,
         'web.tail_domain_log' => TailDomainLogAction::class,
         'app.create' => CreateHostedAppAction::class,
         'app.delete' => DeleteHostedAppAction::class,

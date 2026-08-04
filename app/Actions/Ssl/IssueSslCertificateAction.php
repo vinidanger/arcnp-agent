@@ -48,7 +48,7 @@ class IssueSslCertificateAction implements AgentAction
         $homeDir = config('provisioning.home_base_dir')."/{$username}";
         $documentRoot = DocumentRoot::resolve($homeDir, $domain, $location, $subdir);
 
-        $this->processRunner->issueSslCertificate($domain, $documentRoot);
+        $expiresAt = $this->processRunner->issueSslCertificate($domain, $documentRoot);
 
         $certPath = "/etc/letsencrypt/live/{$domain}/fullchain.pem";
         $keyPath = "/etc/letsencrypt/live/{$domain}/privkey.pem";
@@ -81,6 +81,6 @@ class IssueSslCertificateAction implements AgentAction
         $this->processRunner->testNginxConfig();
         $this->processRunner->reloadNginx();
 
-        return ['domain' => $domain, 'ssl_issued' => true];
+        return ['domain' => $domain, 'ssl_issued' => true, 'expires_at' => $expiresAt];
     }
 }

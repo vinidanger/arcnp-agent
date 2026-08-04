@@ -141,23 +141,55 @@ class ProcessRunner
     /**
      * Certbot/Let's Encrypt envolve chamada de rede externa — timeout
      * bem maior que os outros comandos (e por isso essa Action é
-     * assíncrona no Agent, não roda inline na resposta HTTP).
+     * assíncrona no Agent, não roda inline na resposta HTTP). Devolve a
+     * data de expiração real do certificado (o script lê via
+     * `openssl x509 -enddate`, já rodando como root) — null se por
+     * algum motivo a linha esperada não vier na saída.
      */
-    public function issueSslCertificate(string $domain, string $webroot): void
+    public function issueSslCertificate(string $domain, string $webroot): ?string
     {
-        $this->exec([
+        $result = Process::timeout(120)->run([
             'sudo', '-n', base_path('scripts/issue-ssl-certificate.sh'),
             $domain, $webroot, config('provisioning.ssl_admin_email'),
-        ], 120);
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Falha ao emitir certificado: '.trim($result->errorOutput() ?: $result->output()));
+        }
+
+        if (preg_match('/^EXPIRES_AT=(.+)$/m', $result->output(), $matches)) {
+            return trim($matches[1]);
+        }
+
+        return null;
     }
 
     /**
      * Renova TODOS os certificados do servidor de uma vez (não é por
-     * domínio) — mesmo motivo de timeout longo/assíncrono do issueSslCertificate.
+     * domínio) — mesmo motivo de timeout longo/assíncrono do
+     * issueSslCertificate. Devolve a expiração de CADA certificado que
+     * existe no servidor (não só o que foi renovado agora — o script já
+     * lê todo mundo, é barato, e simplifica o lado Painel).
+     *
+     * @return list<array{domain: string, expires_at: string}>
      */
-    public function renewAllSslCertificates(): void
+    public function renewAllSslCertificates(): array
     {
-        $this->exec(['sudo', '-n', base_path('scripts/renew-ssl-certificates.sh')], 300);
+        $result = Process::timeout(300)->run(['sudo', '-n', base_path('scripts/renew-ssl-certificates.sh')]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Falha ao renovar certificados: '.trim($result->errorOutput() ?: $result->output()));
+        }
+
+        $certs = [];
+
+        foreach (explode("\n", $result->output()) as $line) {
+            if (preg_match('/^CERT:([^:]+):(.+)$/', trim($line), $matches)) {
+                $certs[] = ['domain' => $matches[1], 'expires_at' => trim($matches[2])];
+            }
+        }
+
+        return $certs;
     }
 
     /**

@@ -23,8 +23,8 @@ class RenewAllSslCertificatesAction implements AgentAction
 
     public function execute(array $payload): array
     {
-        $this->processRunner->renewAllSslCertificates();
+        $certs = $this->processRunner->renewAllSslCertificates();
 
-        return ['renewed' => true];
+        return ['renewed' => true, 'certificates' => $certs];
     }
 }

@@ -31,3 +31,4 @@ php_admin_flag[log_errors] = {{log_errors}}
 php_admin_value[error_reporting] = {{error_reporting}}
 php_admin_flag[file_uploads] = {{file_uploads}}
 php_admin_flag[short_open_tag] = {{short_open_tag}}
+php_admin_value[disable_functions] = {{disable_functions}}

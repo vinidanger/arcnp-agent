@@ -31,7 +31,28 @@ class PhpFpmPoolSettings
         'error_reporting',
         'file_uploads',
         'short_open_tag',
+        'disable_functions',
     ];
+
+    /**
+     * Lista fechada de funções que a conta pode desabilitar no próprio
+     * pool — mesma lista que o Painel mostra como checkbox. Diferente
+     * dos outros TUNABLE_KEYS (que confiam no Painel sem revalidar,
+     * lacuna pré-existente fora do escopo desta mudança), esse aqui
+     * entra direto num diretiva de ini livre — vale a pena travar num
+     * whitelist fechado antes de interpolar no arquivo.
+     */
+    public const DISABLABLE_FUNCTIONS = [
+        'exec', 'shell_exec', 'system', 'passthru', 'proc_open', 'popen', 'show_source',
+    ];
+
+    public static function sanitizeDisableFunctions(string $value): string
+    {
+        $requested = array_filter(array_map('trim', explode(',', $value)));
+        $allowed = array_values(array_intersect($requested, self::DISABLABLE_FUNCTIONS));
+
+        return implode(',', $allowed);
+    }
 
     /**
      * @return array<string, string>
@@ -49,6 +70,8 @@ class PhpFpmPoolSettings
         foreach (self::TUNABLE_KEYS as $key) {
             $variables[$key] = $overrides[$key] ?? $defaults[$key];
         }
+
+        $variables['disable_functions'] = self::sanitizeDisableFunctions((string) $variables['disable_functions']);
 
         return $variables;
     }

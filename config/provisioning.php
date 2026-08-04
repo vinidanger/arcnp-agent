@@ -70,5 +70,6 @@ return [
         'error_reporting' => 'E_ALL & ~E_DEPRECATED & ~E_NOTICE',
         'file_uploads' => 'On',
         'short_open_tag' => 'Off',
+        'disable_functions' => '',
     ],
 ];

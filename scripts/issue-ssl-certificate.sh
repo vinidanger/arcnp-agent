@@ -24,4 +24,7 @@ fi
 certbot certonly --webroot -w "$WEBROOT" -d "$DOMAIN" \
     --non-interactive --agree-tos -m "$EMAIL" --no-eff-email
 
+EXPIRES=$(openssl x509 -enddate -noout -in "/etc/letsencrypt/live/$DOMAIN/cert.pem" | sed 's/^notAfter=//')
+echo "EXPIRES_AT=$EXPIRES"
+
 echo "OK"
