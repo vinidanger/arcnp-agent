@@ -1331,18 +1331,23 @@ comando embrulhado conecta em `localhost`, toda tentativa de senha
 chega no sshd vindo de `127.0.0.1` — **isso anula qualquer
 rate-limit por IP** (fail2ban, por exemplo) que normalmente protegeria
 contra força bruta, porque pro sshd todo mundo parece vir do mesmo
-lugar. Por isso o nginx na frente do ttyd faz autenticação HTTP
-Basic (`auth_basic`) — mesmo mecanismo (hash via `openssl passwd`,
-sem precisar do binário `htpasswd`) já usado na proteção de pasta da
-Fase 2 — antes de deixar a requisição sequer chegar no ttyd. Isso
-fecha o problema do CVE (não dá pra alcançar o ttyd sem essa senha
-antes), mas **não elimina totalmente** o problema do fail2ban cego
-(quem já tem a senha HTTP ainda tenta senhas de conta via localhost)
-— o `MaxAuthTries` padrão do sshd (6 tentativas por conexão) e o
-tempo curto de exposição real (só quem já é admin/cliente logado no
-Painel vê o link) mitigam, mas não é o mesmo nível de proteção de uma
-conexão SSH normal vinda de fora. Documentado aqui pra não fingir que
-o risco é zero.
+lugar.
+
+**Decisão de produto**: cheguei a desenhar uma camada extra de senha
+HTTP no nginx (igual a proteção de pasta da Fase 2) pra fechar esse
+buraco por completo. O usuário decidiu não usar — significaria uma
+segunda senha, compartilhada pelo servidor inteiro (não por conta),
+que o cliente precisaria pedir ao suporte só pra abrir o terminal, e
+que de qualquer forma não isola conta de conta (quem tem a senha HTTP
+ainda tenta senha de QUALQUER conta via localhost — o problema do
+fail2ban cego continua). Trade-off: menos fricção, mas o único freio
+contra spam de tentativas passa a ser o `limit_req`/`limit_conn` do
+nginx abaixo (por IP, sem senha nenhuma) e o `MaxAuthTries` padrão do
+sshd (6 tentativas por conexão TCP — cada tentativa custa um fork
+novo do `ttyd`, mais caro que um brute-force local de verdade, mas não
+impossível). Ainda documentado aqui pra não fingir que o risco é zero
+— se um dia quiser reforçar, a camada de senha HTTP descrita acima é
+a forma mais direta.
 
 ```
 dnf install -y epel-release
@@ -1390,20 +1395,17 @@ openssl req -x509 -nodes -newkey rsa:2048 \
 chmod 0600 /etc/nginx/terminal.key
 ```
 
-Senha HTTP Basic — escolha uma senha forte, gere o hash e cole no
-lugar de `HASH_AQUI`:
-
-```
-openssl passwd -6
-# copia o hash impresso e usa na linha abaixo
-echo 'terminal:HASH_AQUI' > /etc/nginx/terminal.htpasswd
-```
-
 `/etc/nginx/conf.d/_terminal.conf` (prefixo `_` de propósito, pra não
-misturar com os vhosts `{domínio}.conf` de cada conta):
+misturar com os vhosts `{domínio}.conf` de cada conta). `limit_req`/
+`limit_conn` por IP substituem a camada de senha HTTP — não barram
+ninguém, só desaceleram tentativa repetida (10 conexões novas por
+minuto, rajada de 5, máximo 10 sessões simultâneas por IP):
 
 ```
 cat > /etc/nginx/conf.d/_terminal.conf << 'EOF'
+limit_req_zone $binary_remote_addr zone=terminal_req:10m rate=10r/m;
+limit_conn_zone $binary_remote_addr zone=terminal_conn:10m;
+
 server {
     listen 8446 ssl;
     listen [::]:8446 ssl;
@@ -1411,8 +1413,8 @@ server {
     ssl_certificate /etc/nginx/terminal.crt;
     ssl_certificate_key /etc/nginx/terminal.key;
 
-    auth_basic "Terminal";
-    auth_basic_user_file /etc/nginx/terminal.htpasswd;
+    limit_req zone=terminal_req burst=5 nodelay;
+    limit_conn terminal_conn 10;
 
     location / {
         proxy_pass http://127.0.0.1:7681;
@@ -1436,9 +1438,9 @@ firewall-cmd --permanent --add-port=8446/tcp
 firewall-cmd --reload
 ```
 
-**Teste pós-deploy**: acesse `https://{IP_DO_SERVIDOR}:8446` — o
-navegador deve pedir a senha HTTP Basic primeiro (aviso de certificado
-autoassinado esperado, aceita); depois disso, o terminal abre pedindo
-"Usuário:" — digite o `linux_username` de uma conta com "Acesso SSH"
-ativado, depois a senha SSH dela. Confirme que `Ctrl+C` e redimensionar
-a janela do navegador funcionam normalmente dentro do terminal.
+**Teste pós-deploy**: acesse `https://{IP_DO_SERVIDOR}:8446` (aviso de
+certificado autoassinado esperado, aceita) — o terminal abre direto
+pedindo "Usuário:". Digite o `linux_username` de uma conta com "Acesso
+SSH" ativado, depois a senha SSH dela (autenticação real, via sshd).
+Confirme que `Ctrl+C` e redimensionar a janela do navegador funcionam
+normalmente dentro do terminal.
