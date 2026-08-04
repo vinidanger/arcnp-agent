@@ -6,6 +6,7 @@ use App\Actions\Contracts\AgentAction;
 use App\Services\System\ProcessRunner;
 use App\Support\DomainName;
 use App\Support\NginxVhost;
+use App\Support\VhostExtraBlock;
 use Illuminate\Support\Facades\File;
 use InvalidArgumentException;
 use RuntimeException;
@@ -58,7 +59,7 @@ class SyncFolderProtectionsAction implements AgentAction
         File::ensureDirectoryExists($htpasswdDir, 0755, true);
         $this->syncHtpasswdFiles($htpasswdDir, $protections);
 
-        $updated = $this->replaceBlock($original, $this->renderBlock($protections, $htpasswdDir), $hasMarkers);
+        $updated = VhostExtraBlock::replace($original, self::MARKER_BEGIN, self::MARKER_END, $this->renderBlock($protections, $htpasswdDir));
 
         File::put($configPath, $updated);
 
@@ -126,28 +127,5 @@ class SyncFolderProtectionsAction implements AgentAction
         }
 
         return implode("\n", $lines);
-    }
-
-    private function replaceBlock(string $contents, string $block, bool $hasMarkers): string
-    {
-        if ($hasMarkers) {
-            $pattern = '/\s*'.preg_quote(self::MARKER_BEGIN, '/').'.*?'.preg_quote(self::MARKER_END, '/').'/s';
-            $replacement = $block === '' ? '' : "\n    ".self::MARKER_BEGIN."\n{$block}\n    ".self::MARKER_END;
-
-            return preg_replace($pattern, $replacement, $contents, 1);
-        }
-
-        // Sem marcador ainda — insere antes do último "}" do arquivo,
-        // que é sempre o server{} que serve conteúdo real (no stub
-        // SSL, o primeiro server{} só redireciona pra https).
-        $lastBrace = strrpos($contents, '}');
-
-        if ($lastBrace === false) {
-            throw new RuntimeException('Vhost em formato inesperado — sem chave de fechamento.');
-        }
-
-        $insert = '    '.self::MARKER_BEGIN."\n{$block}\n    ".self::MARKER_END."\n";
-
-        return substr($contents, 0, $lastBrace).$insert.substr($contents, $lastBrace);
     }
 }

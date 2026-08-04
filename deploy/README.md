@@ -1091,3 +1091,17 @@ resincronizar (ou seja, o auto-cura acima entra em ação de novo).
 
 Nenhum sudoers novo — a Action só chama `nginx -t`/`reload`, que já
 tem entrada própria (ver seção 8).
+
+## 30. Redirecionamentos de site
+
+Mesmo mecanismo de bloco-entre-marcadores da seção 29
+(`VhostExtraBlock`, marcadores `# ARCNP:REDIRECTS:BEGIN`/`:END`) —
+`SyncRedirectsAction` (ação `web.sync_redirects`) só troca o que entra
+no bloco: `location {caminho} { return {301|302} {destino}; }` em vez
+de `auth_basic`. Nenhum diretório novo, nenhum sudoers novo — não
+precisa de nenhum passo de deploy além do `git pull` de sempre.
+
+Mesmo cuidado da seção 29 se aplica aqui: troca de PHP e emissão de
+SSL regeneram o vhost inteiro a partir do stub, então essas duas ações
+também reenviam os redirecionamentos do domínio logo depois (mesmo
+hook de `resyncIfNeeded`, agora chamado pros dois serviços).
