@@ -367,6 +367,37 @@ class ProcessRunner
     }
 
     /**
+     * Timeout bem mais alto que o resto (download + extract + wp-cli
+     * podem levar um tempo real) — por isso InstallWordPressAction é
+     * assíncrona, essa chamada não bloqueia uma requisição HTTP normal.
+     */
+    public function installWordPress(
+        string $username,
+        string $domain,
+        ?string $root,
+        string $destPath,
+        string $downloadUrl,
+        string $dbName,
+        string $dbUsername,
+        string $dbPassword,
+        string $adminUser,
+        string $adminPassword,
+        string $adminEmail,
+        string $siteTitle,
+        string $wpConfigContent,
+    ): void {
+        $result = Process::timeout(300)->input($wpConfigContent)->run([
+            'sudo', '-n', base_path('scripts/install-wordpress.sh'),
+            $username, $domain, (string) $root, $destPath, $downloadUrl,
+            $dbName, $dbUsername, $dbPassword, $adminUser, $adminPassword, $adminEmail, $siteTitle,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Falha ao instalar WordPress: '.trim($result->errorOutput() ?: $result->output()));
+        }
+    }
+
+    /**
      * Grava o zone file (validado via named-checkzone dentro do
      * script) — NÃO recarrega. Pra zona nova, o arquivo precisa
      * existir antes do zones.conf referenciar ela; pra edição de

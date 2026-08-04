@@ -1483,3 +1483,56 @@ systemd não existem no ambiente de desenvolvimento local):
    https://{domínio}` ou pelo navegador).
 5. Remova o app pelo Painel e confirme que o domínio volta a servir
    PHP normalmente (unit parado/removido, vhost reescrito).
+
+## 36. Instalador de apps (WordPress + zip genérico)
+
+**Decisão de escopo**: v1 cobre WordPress (fluxo completo — banco,
+wp-config.php, usuário admin via `wp-cli`) e um instalador de "app
+genérico" (o próprio cliente sobe um `.zip`, o Agent só extrai —
+reaproveita 100% dos `files.upload`/`files.extract`/`files.delete` que
+já existem, **nenhum código novo** pro genérico). O catálogo em si é um
+array de config no Painel (`config/app_catalog.php`), não uma tabela —
+só 2 entradas, cada uma com lógica de instalação própria.
+
+O WordPress precisa do `wp-cli` instalado globalmente (é o que roda o
+"instalador de 5 minutos" — cria `wp_options`/usuário admin — sem
+precisar simular o formulário web do WordPress via HTTP, muito mais
+frágil e dependente de versão):
+
+```
+curl -o /usr/local/bin/wp-cli.phar https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+chmod +x /usr/local/bin/wp-cli.phar
+php /usr/local/bin/wp-cli.phar --info --allow-root
+
+chmod +x scripts/install-wordpress.sh
+git update-index --chmod=+x scripts/install-wordpress.sh
+
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+Confirme que `curl` e `unzip` estão presentes (já são usados por outras
+partes do Agent — extração de backup/arquivo). **Sem passo de firewall
+novo** — o download é feito pelo próprio Agent saindo pra internet
+(mesmo caminho que o `certbot` já usa pra validar/renovar certificado),
+nada novo é exposto.
+
+O download do WordPress em si é sempre de `https://wordpress.org/latest.zip`
+(fixo no catálogo do Painel) — o script `install-wordpress.sh` também
+revalida que a URL recebida é `https://` e termina em `wordpress.org`
+antes de baixar qualquer coisa, mesmo o Painel só mandando essa URL
+fixa (defesa em profundidade, mesmo padrão do resto do Agent).
+
+**Teste pós-deploy** (download real de wordpress.org + `wp-cli` de
+verdade só dá pra testar depois do deploy — não existe localmente):
+1. Pelo Painel, instale WordPress num domínio de teste (usuário/senha/
+   e-mail de admin de teste).
+2. Confirme que o job aparece como `completed` (ver `AgentJob`/tela do
+   instalador) e que `wp-config.php` foi escrito com as credenciais do
+   banco certas.
+3. Acesse `http://{domínio}/wp-admin/` e confirme login com o usuário
+   admin criado.
+4. Teste o instalador genérico: suba um `.zip` qualquer (ex.: um
+   `index.html` simples) e confirme que aparece extraído no domínio.
+5. Remova as duas instalações pelo Painel e confirme que os arquivos
+   (e o banco, no caso do WordPress) somem.

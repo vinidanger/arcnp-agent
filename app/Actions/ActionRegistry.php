@@ -26,6 +26,7 @@ use App\Actions\Files\RenameFileAction;
 use App\Actions\Files\WriteFileAction;
 use App\Actions\Hosting\ReactivateHostingAccountAction;
 use App\Actions\Hosting\SuspendHostingAccountAction;
+use App\Actions\Installer\InstallWordPressAction;
 use App\Actions\Linux\CreateSystemUserAction;
 use App\Actions\Linux\DeleteSystemUserAction;
 use App\Actions\Mail\DeleteMailDkimAction;
@@ -91,6 +92,7 @@ class ActionRegistry
         'app.delete' => DeleteHostedAppAction::class,
         'app.restart' => RestartHostedAppAction::class,
         'app.status' => HostedAppStatusAction::class,
+        'app.install_wordpress' => InstallWordPressAction::class,
         'backup.create' => CreateBackupAction::class,
         'backup.delete' => DeleteBackupAction::class,
         'files.list' => ListDirectoryAction::class,
