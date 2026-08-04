@@ -462,6 +462,45 @@ class ProcessRunner
         return $result->output();
     }
 
+    /**
+     * Escreve+habilita o unit systemd de um app (Node.js/Python) — via
+     * sudo porque /etc/systemd/system/ exige root pra escrever e pra
+     * chamar daemon-reload/enable, diferente do banco de usuários FTP
+     * (só lido pelo PAM, sem exigir dono específico).
+     */
+    public function createAppUnit(string $unit, string $unitContent): void
+    {
+        $result = Process::timeout(30)->input($unitContent)->run([
+            'sudo', '-n', base_path('scripts/manage-app.sh'), $unit, 'create',
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Falha ao criar serviço do app: '.trim($result->errorOutput() ?: $result->output()));
+        }
+    }
+
+    public function removeAppUnit(string $unit): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/manage-app.sh'), $unit, 'remove']);
+    }
+
+    public function restartAppUnit(string $unit): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/manage-app.sh'), $unit, 'restart']);
+    }
+
+    /**
+     * Só leitura — consultar o status de um unit systemd não exige
+     * privilégio nenhum no systemd (diferente de criar/remover), então
+     * roda sem sudo.
+     */
+    public function appUnitStatus(string $unit): string
+    {
+        $result = Process::timeout(10)->run(['systemctl', 'is-active', $unit]);
+
+        return trim($result->output()) ?: trim($result->errorOutput()) ?: 'unknown';
+    }
+
     private function exec(array $command, int $timeout = 30): void
     {
         $result = Process::timeout($timeout)->run($command);

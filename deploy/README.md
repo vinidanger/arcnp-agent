@@ -1444,3 +1444,42 @@ pedindo "Usuário:". Digite o `linux_username` de uma conta com "Acesso
 SSH" ativado, depois a senha SSH dela (autenticação real, via sshd).
 Confirme que `Ctrl+C` e redimensionar a janela do navegador funcionam
 normalmente dentro do terminal.
+
+## 35. Setup Node.js/Python App
+
+Domínio continua sendo criado do jeito de sempre (PHP). "Configurar
+app" é uma ação separada que troca o vhost desse domínio pro modo
+proxy (`proxy_pass` pra um processo local) — não mexe nas Actions de
+criação/PHP existentes. Cada app roda como um unit systemd próprio
+(`arcnp-app-{id}.service`), numa porta interna alocada a partir de
+20000, **nunca exposta em firewall** — só o nginx fala com ela via
+`127.0.0.1`, mesmo raciocínio do FTP/terminal (só abre o que precisa
+ser público).
+
+```
+dnf module install -y nodejs:20
+# python3 já vem instalado por padrão no AlmaLinux 9 — nada a fazer
+
+chmod +x scripts/manage-app.sh
+git update-index --chmod=+x scripts/manage-app.sh
+
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+Sem passo de firewall novo e sem passo de certificado novo — apps
+reaproveitam o mesmo `certbot`/self-signed que os domínios PHP já
+usam (o SSL é emitido pro domínio, não pra porta interna do app).
+
+**Teste pós-deploy** (só dá pra testar depois do deploy — Node/Python/
+systemd não existem no ambiente de desenvolvimento local):
+1. Envie um app "Hello World" (ex.: `index.js` com um `http.createServer`
+   simples escutando em `process.env.PORT`) pra dentro de
+   `public_html` de um domínio de teste, via gerenciador de arquivos.
+2. No Painel, configure o app apontando pro `index.js` enviado.
+3. Confirme `systemctl status arcnp-app-{id}.service` ativo e
+   `curl http://127.0.0.1:{porta}` respondendo localmente no servidor.
+4. Confirme que o domínio responde o app via nginx (`curl -k
+   https://{domínio}` ou pelo navegador).
+5. Remova o app pelo Painel e confirme que o domínio volta a servir
+   PHP normalmente (unit parado/removido, vhost reescrito).

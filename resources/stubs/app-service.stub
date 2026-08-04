@@ -1,0 +1,15 @@
+[Unit]
+Description=Arcn Panel app - {{domain}}
+After=network.target
+
+[Service]
+WorkingDirectory={{working_directory}}
+ExecStart={{exec_start}}
+Environment=PORT={{port}}
+Restart=on-failure
+RestartSec=5
+User={{username}}
+Group={{username}}
+
+[Install]
+WantedBy=multi-user.target

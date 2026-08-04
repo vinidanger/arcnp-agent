@@ -43,8 +43,7 @@ class IssueSslCertificateAction implements AgentAction
         $domain = DomainName::validate($payload['domain'] ?? '');
         $subdir = blank($payload['subdir'] ?? null) ? null : Subdirectory::validate($payload['subdir']);
         $location = ($payload['location'] ?? null) === 'outside' ? 'outside' : null;
-        $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
-        PhpVersion::config($phpVersion);
+        $mode = ($payload['mode'] ?? 'php') === 'app' ? 'app' : 'php';
 
         $homeDir = config('provisioning.home_base_dir')."/{$username}";
         $documentRoot = DocumentRoot::resolve($homeDir, $domain, $location, $subdir);
@@ -54,13 +53,28 @@ class IssueSslCertificateAction implements AgentAction
         $certPath = "/etc/letsencrypt/live/{$domain}/fullchain.pem";
         $keyPath = "/etc/letsencrypt/live/{$domain}/privkey.pem";
 
-        $contents = $this->templateRenderer->render('nginx-vhost-ssl', [
-            'domain' => $domain,
-            'document_root' => $documentRoot,
-            'php_fpm_socket' => PhpFpmPool::socketPath($username, $phpVersion),
-            'ssl_cert_path' => $certPath,
-            'ssl_cert_key_path' => $keyPath,
-        ]);
+        if ($mode === 'app') {
+            $appPort = (int) ($payload['app_port'] ?? 0);
+
+            $contents = $this->templateRenderer->render('nginx-vhost-app-ssl', [
+                'domain' => $domain,
+                'document_root' => $documentRoot,
+                'app_port' => $appPort,
+                'ssl_cert_path' => $certPath,
+                'ssl_cert_key_path' => $keyPath,
+            ]);
+        } else {
+            $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
+            PhpVersion::config($phpVersion);
+
+            $contents = $this->templateRenderer->render('nginx-vhost-ssl', [
+                'domain' => $domain,
+                'document_root' => $documentRoot,
+                'php_fpm_socket' => PhpFpmPool::socketPath($username, $phpVersion),
+                'ssl_cert_path' => $certPath,
+                'ssl_cert_key_path' => $keyPath,
+            ]);
+        }
 
         File::put(NginxVhost::configPath($domain), $contents);
 

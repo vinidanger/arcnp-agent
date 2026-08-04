@@ -42,9 +42,13 @@ use App\Actions\Ssh\SyncSshKeysAction;
 use App\Actions\Ssl\IssueSslCertificateAction;
 use App\Actions\Ssl\RenewAllSslCertificatesAction;
 use App\Actions\Web\CreateAddonDomainAction;
+use App\Actions\Web\CreateHostedAppAction;
 use App\Actions\Web\CreateVirtualHostAction;
 use App\Actions\Web\DeleteAddonDomainAction;
+use App\Actions\Web\DeleteHostedAppAction;
 use App\Actions\Web\DeleteVirtualHostAction;
+use App\Actions\Web\HostedAppStatusAction;
+use App\Actions\Web\RestartHostedAppAction;
 use App\Actions\Web\SyncFolderProtectionsAction;
 use App\Actions\Web\SyncHotlinkProtectionAction;
 use App\Actions\Web\SyncRedirectsAction;
@@ -83,6 +87,10 @@ class ActionRegistry
         'web.sync_redirects' => SyncRedirectsAction::class,
         'web.sync_hotlink_protection' => SyncHotlinkProtectionAction::class,
         'web.tail_domain_log' => TailDomainLogAction::class,
+        'app.create' => CreateHostedAppAction::class,
+        'app.delete' => DeleteHostedAppAction::class,
+        'app.restart' => RestartHostedAppAction::class,
+        'app.status' => HostedAppStatusAction::class,
         'backup.create' => CreateBackupAction::class,
         'backup.delete' => DeleteBackupAction::class,
         'files.list' => ListDirectoryAction::class,
