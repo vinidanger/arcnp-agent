@@ -30,6 +30,7 @@ use App\Actions\Linux\DeleteSystemUserAction;
 use App\Actions\Mail\DeleteMailDkimAction;
 use App\Actions\Mail\SyncMailDkimAction;
 use App\Actions\Mail\SyncMailStateAction;
+use App\Actions\Mail\TailMailLogAction;
 use App\Actions\Php\CreatePhpFpmPoolAction;
 use App\Actions\Php\DeletePhpFpmPoolAction;
 use App\Actions\Php\SwitchPhpVersionAction;
@@ -46,6 +47,7 @@ use App\Actions\Web\DeleteVirtualHostAction;
 use App\Actions\Web\SyncFolderProtectionsAction;
 use App\Actions\Web\SyncHotlinkProtectionAction;
 use App\Actions\Web\SyncRedirectsAction;
+use App\Actions\Web\TailDomainLogAction;
 use App\Actions\Web\UpdateVirtualHostPhpVersionAction;
 use InvalidArgumentException;
 
@@ -79,6 +81,7 @@ class ActionRegistry
         'web.sync_folder_protections' => SyncFolderProtectionsAction::class,
         'web.sync_redirects' => SyncRedirectsAction::class,
         'web.sync_hotlink_protection' => SyncHotlinkProtectionAction::class,
+        'web.tail_domain_log' => TailDomainLogAction::class,
         'backup.create' => CreateBackupAction::class,
         'backup.delete' => DeleteBackupAction::class,
         'files.list' => ListDirectoryAction::class,
@@ -101,6 +104,7 @@ class ActionRegistry
         'mail.sync_state' => SyncMailStateAction::class,
         'mail.sync_dkim' => SyncMailDkimAction::class,
         'mail.delete_dkim' => DeleteMailDkimAction::class,
+        'mail.tail_log' => TailMailLogAction::class,
     ];
 
     public static function resolve(string $action): AgentAction

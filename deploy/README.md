@@ -1122,3 +1122,31 @@ Nenhum diretório novo, nenhum sudoers novo. Mesmo cuidado de
 `resyncIfNeeded` depois de troca de PHP/emissão de SSL (agora os TRÊS
 serviços — proteção de pasta, redirecionamentos, hotlink — são
 resincronizados nesse ponto).
+
+## 32. Estatísticas e logs de domínio / Rastreamento de e-mails
+
+Dois Actions só-leitura, nenhuma mutação — reaproveitam um script novo
+(`scripts/tail-log.sh`, ver sudoers) que faz `tail`/`grep` nos logs já
+existentes. O domínio/tipo nunca chega como caminho pronto: a Action
+manda só `domínio` + `access|error`, o script monta
+`/var/log/nginx/{domínio}-{tipo}.log` sozinho (mesmo arquivo que o
+stub do vhost já declara desde a seção 22) — path traversal não tem
+como acontecer mesmo se a validação da Action falhar, porque o script
+valida o domínio de novo com regex própria antes de montar o caminho.
+
+**Log de e-mail** usa `/var/log/maillog` — caminho padrão do rsyslog
+no AlmaLinux/Rocky (Postfix não escreve log próprio nessas
+distros, vai tudo pro syslog e o rsyslog filtra pra esse arquivo por
+config padrão do pacote; nada a configurar aqui). Rastreamento por
+endereço é um `grep -F` (string fixa, não regex) nas últimas 5000
+linhas — não é busca full-text no arquivo inteiro, é uma janela
+recente o bastante pra achar o problema do dia.
+
+```
+chmod +x scripts/tail-log.sh
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+(o `install` acima já reinstala o sudoers inteiro com a linha nova do
+`tail-log.sh` — mesmo comando de sempre, não é um passo extra.)

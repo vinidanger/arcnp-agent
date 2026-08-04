@@ -419,6 +419,32 @@ class ProcessRunner
         $this->exec(['sudo', '-n', base_path('scripts/manage-dns-zone.sh'), 'delete-zone', $domain]);
     }
 
+    public function tailNginxLog(string $domain, string $type, int $lines): string
+    {
+        $result = Process::timeout(30)->run([
+            'sudo', '-n', base_path('scripts/tail-log.sh'), 'nginx', $domain, $type, (string) $lines,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Falha ao ler log: '.trim($result->errorOutput() ?: $result->output()));
+        }
+
+        return $result->output();
+    }
+
+    public function tailMailLog(int $lines, ?string $search): string
+    {
+        $result = Process::timeout(30)->run([
+            'sudo', '-n', base_path('scripts/tail-log.sh'), 'mail', (string) $lines, $search ?? '',
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Falha ao ler log de e-mail: '.trim($result->errorOutput() ?: $result->output()));
+        }
+
+        return $result->output();
+    }
+
     private function exec(array $command, int $timeout = 30): void
     {
         $result = Process::timeout($timeout)->run($command);
