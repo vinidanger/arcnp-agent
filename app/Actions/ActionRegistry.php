@@ -43,6 +43,7 @@ use App\Actions\Web\CreateAddonDomainAction;
 use App\Actions\Web\CreateVirtualHostAction;
 use App\Actions\Web\DeleteAddonDomainAction;
 use App\Actions\Web\DeleteVirtualHostAction;
+use App\Actions\Web\SyncFolderProtectionsAction;
 use App\Actions\Web\UpdateVirtualHostPhpVersionAction;
 use InvalidArgumentException;
 
@@ -73,6 +74,7 @@ class ActionRegistry
         'php.switch_version' => SwitchPhpVersionAction::class,
         'php.update_pool_settings' => UpdatePhpFpmPoolSettingsAction::class,
         'web.update_vhost_php_version' => UpdateVirtualHostPhpVersionAction::class,
+        'web.sync_folder_protections' => SyncFolderProtectionsAction::class,
         'backup.create' => CreateBackupAction::class,
         'backup.delete' => DeleteBackupAction::class,
         'files.list' => ListDirectoryAction::class,

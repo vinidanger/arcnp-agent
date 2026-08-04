@@ -1049,3 +1049,45 @@ do mesmo processo já root via sudo.
 ### 28.6. Firewall / rede
 
 Nenhuma porta pública nova — o socket LMTP é Unix (`/var/spool/postfix/private/dovecot-lmtp`), só o Postfix local fala com ele, igual o `private/auth` do SASL da seção 22.
+
+## 29. Proteção de pasta com senha (.htpasswd)
+
+Reaproveita o mesmo mecanismo de escrita direta (sem sudo) da seção 6
+— um diretório novo, group-writable pro usuário do Agent:
+
+```
+mkdir -p /etc/nginx/htpasswd
+chgrp arcnpagent /etc/nginx/htpasswd
+chmod 2775 /etc/nginx/htpasswd
+```
+
+Diferente do resto da seção de e-mail/DNS, aqui a Action
+(`SyncFolderProtectionsAction`, ação `web.sync_folder_protections`)
+**não regenera o vhost inteiro** — ela só reescreve o trecho entre os
+marcadores `# ARCNP:PROTECTED-LOCATIONS:BEGIN`/`:END` dentro do
+arquivo já existente em `/etc/nginx/conf.d/{domínio}.conf`. Se os
+marcadores ainda não existirem (vhost criado antes dessa feature, ou
+reescrito do zero por uma troca de versão de PHP/emissão de SSL — que
+usam o stub, sem noção nenhuma de proteção de pasta), ela insere o
+bloco automaticamente antes do último `}` do arquivo na primeira vez
+que rodar — não precisa reprovisionar nada manualmente.
+
+Cada regra vira um arquivo `/etc/nginx/htpasswd/{domínio}/{id}.htpasswd`
+com uma linha `usuário:hash`. O hash chega pronto do Painel (bcrypt,
+via `Hash::make()` — mesmo formato usado nas senhas de caixa de
+e-mail) porque o `crypt()` do glibc/libxcrypt do AlmaLinux/Rocky 9
+entende bcrypt nativamente; não precisa gerar com `htpasswd -B` na
+mão. Regra removida no Painel some do próximo sync e o `.htpasswd`
+correspondente é apagado.
+
+**Importante**: como o Painel troca versão de PHP ou emite SSL
+regenerando o vhost inteiro a partir do stub (seção 22-ish/14), essas
+duas ações reenviam automaticamente as proteções de pasta daquele
+domínio logo depois de reescrever o vhost — sem isso, o bloco de
+proteção seria perdido silenciosamente na próxima troca de PHP/SSL. Se
+notar uma pasta que "perdeu" a senha depois de mexer em PHP/SSL,
+mande qualquer criação/remoção de proteção pelo Painel pra ela
+resincronizar (ou seja, o auto-cura acima entra em ação de novo).
+
+Nenhum sudoers novo — a Action só chama `nginx -t`/`reload`, que já
+tem entrada própria (ver seção 8).

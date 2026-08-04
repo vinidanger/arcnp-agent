@@ -7,6 +7,7 @@ return [
      */
     'home_base_dir' => '/home',
     'nginx_conf_dir' => '/etc/nginx/conf.d',
+    'htpasswd_dir' => '/etc/nginx/htpasswd',
     'default_php_version' => env('AGENT_DEFAULT_PHP_VERSION', '8.3'),
 
     /*
