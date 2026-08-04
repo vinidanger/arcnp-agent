@@ -13,15 +13,18 @@ use RuntimeException;
 
 /**
  * Mesmo mecanismo de bloco-entre-marcadores da proteção de pasta/
- * redirecionamentos (ver VhostExtraBlock) — o bloco aqui é um "types { }"
- * dentro do server{}. IMPORTANTE: um bloco "types{}" num contexto mais
- * específico (server) SUBSTITUI por completo o herdado do http{} — não
- * é cumulativo. Por isso o bloco sempre começa com "include mime.types;"
- * (resolve contra o prefix padrão do nginx, /etc/nginx/mime.types,
- * mesmo caminho relativo usado no nginx.conf raiz) antes de acrescentar
- * as extensões customizadas — sem isso, css/js/html/imagens do domínio
- * inteiro quebrariam (virariam application/octet-stream) assim que
- * qualquer regra customizada fosse adicionada.
+ * redirecionamentos (ver VhostExtraBlock). Descartei a ideia original
+ * de um bloco "types{}" custom: um "types{}" num contexto mais
+ * específico (server) SUBSTITUI por completo o herdado do http{} (não
+ * é cumulativo), e tentar "restaurar" a tabela padrão com
+ * "include mime.types;" DENTRO desse bloco quebra de outro jeito — o
+ * arquivo /etc/nginx/mime.types já é ele mesmo um bloco "types { ... }"
+ * inteiro, então incluí-lo dentro do nosso types{} aninha um types{}
+ * dentro de outro, que o nginx rejeita (erro real visto em produção:
+ * "unexpected '{' in mime.types:2"). A correção é não mexer na tabela
+ * de tipos nenhuma — cada regra vira um "location" só pra extensão
+ * daquele arquivo, com "default_type", que nunca precisa da tabela
+ * padrão pra funcionar e nunca conflita com o resto do vhost.
  */
 class SyncMimeTypesAction implements AgentAction
 {
@@ -77,10 +80,12 @@ class SyncMimeTypesAction implements AgentAction
         $mimeType = (string) ($r['mime_type'] ?? '');
 
         // Path já vem validado no Painel — confere de novo por defesa
-        // em profundidade, já que entra direto num bloco "types{}" do
+        // em profundidade, já que entra direto num "location" regex do
         // nginx. Extensão: só letras/números/ponto (pra permitir algo
-        // tipo "tar.gz"). Tipo MIME: formato padrão "categoria/subtipo",
-        // com os caracteres que RFC 6838 permite num subtipo.
+        // tipo "tar.gz" — o ponto em si é escapado antes de virar
+        // regex, ver renderBlock()). Tipo MIME: formato padrão
+        // "categoria/subtipo", com os caracteres que RFC 6838 permite
+        // num subtipo.
         if (! preg_match('/^[a-zA-Z0-9.]+$/', $extension)) {
             throw new InvalidArgumentException("Extensão inválida: {$extension}");
         }
@@ -99,13 +104,18 @@ class SyncMimeTypesAction implements AgentAction
             return '';
         }
 
-        $lines = ['    types {', '        include mime.types;'];
+        $lines = [];
 
         foreach ($rules as $r) {
-            $lines[] = "        {$r['mimeType']} {$r['extension']};";
-        }
+            // Ponto literal escapado ("tar.gz" -> "tar\.gz") — sem isso
+            // o "." do regex do nginx bateria com QUALQUER caractere
+            // ali, não só um ponto de verdade.
+            $escapedExtension = str_replace('.', '\.', $r['extension']);
 
-        $lines[] = '    }';
+            $lines[] = "    location ~* \\.{$escapedExtension}$ {";
+            $lines[] = "        default_type {$r['mimeType']};";
+            $lines[] = '    }';
+        }
 
         return implode("\n", $lines);
     }
