@@ -1105,3 +1105,20 @@ Mesmo cuidado da seção 29 se aplica aqui: troca de PHP e emissão de
 SSL regeneram o vhost inteiro a partir do stub, então essas duas ações
 também reenviam os redirecionamentos do domínio logo depois (mesmo
 hook de `resyncIfNeeded`, agora chamado pros dois serviços).
+
+## 31. Proteção Hotlink
+
+Mesmo mecanismo de bloco-entre-marcadores das seções 29/30
+(`VhostExtraBlock`, marcadores `# ARCNP:HOTLINK:BEGIN`/`:END`) —
+`SyncHotlinkProtectionAction` (ação `web.sync_hotlink_protection`)
+gera um único `location ~* \.(ext1|ext2|...)$` com `valid_referers` +
+`if ($invalid_referer) { return 403; }`, cobrindo as extensões
+escolhidas no Painel. Diferente de proteção de pasta e
+redirecionamentos (que são LISTAS de regras), hotlink é liga/desliga
+por domínio — desativar manda `enabled: false`, o que limpa o bloco
+(mesmo efeito de mandar uma lista vazia nas outras duas).
+
+Nenhum diretório novo, nenhum sudoers novo. Mesmo cuidado de
+`resyncIfNeeded` depois de troca de PHP/emissão de SSL (agora os TRÊS
+serviços — proteção de pasta, redirecionamentos, hotlink — são
+resincronizados nesse ponto).

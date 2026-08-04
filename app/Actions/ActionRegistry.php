@@ -44,6 +44,7 @@ use App\Actions\Web\CreateVirtualHostAction;
 use App\Actions\Web\DeleteAddonDomainAction;
 use App\Actions\Web\DeleteVirtualHostAction;
 use App\Actions\Web\SyncFolderProtectionsAction;
+use App\Actions\Web\SyncHotlinkProtectionAction;
 use App\Actions\Web\SyncRedirectsAction;
 use App\Actions\Web\UpdateVirtualHostPhpVersionAction;
 use InvalidArgumentException;
@@ -77,6 +78,7 @@ class ActionRegistry
         'web.update_vhost_php_version' => UpdateVirtualHostPhpVersionAction::class,
         'web.sync_folder_protections' => SyncFolderProtectionsAction::class,
         'web.sync_redirects' => SyncRedirectsAction::class,
+        'web.sync_hotlink_protection' => SyncHotlinkProtectionAction::class,
         'backup.create' => CreateBackupAction::class,
         'backup.delete' => DeleteBackupAction::class,
         'files.list' => ListDirectoryAction::class,
