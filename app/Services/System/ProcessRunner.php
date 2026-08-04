@@ -377,6 +377,7 @@ class ProcessRunner
         ?string $root,
         string $destPath,
         string $downloadUrl,
+        string $siteUrl,
         string $dbName,
         string $dbUsername,
         string $dbPassword,
@@ -388,7 +389,7 @@ class ProcessRunner
     ): void {
         $result = Process::timeout(300)->input($wpConfigContent)->run([
             'sudo', '-n', base_path('scripts/install-wordpress.sh'),
-            $username, $domain, (string) $root, $destPath, $downloadUrl,
+            $username, $domain, (string) $root, $destPath, $downloadUrl, $siteUrl,
             $dbName, $dbUsername, $dbPassword, $adminUser, $adminPassword, $adminEmail, $siteTitle,
         ]);
 

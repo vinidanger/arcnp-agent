@@ -40,6 +40,7 @@ class InstallWordPressAction implements AgentAction
         $adminPassword = (string) ($payload['admin_password'] ?? '');
         $adminEmail = (string) ($payload['admin_email'] ?? '');
         $siteTitle = (string) ($payload['site_title'] ?? '');
+        $sslActive = (bool) ($payload['ssl_active'] ?? false);
 
         if ($dbName === '' || $dbUsername === '' || $dbPassword === '') {
             throw new InvalidArgumentException('Credenciais de banco de dados são obrigatórias.');
@@ -63,6 +64,15 @@ class InstallWordPressAction implements AgentAction
         $root = $location === 'outside' ? $domain : null;
         $destPath = $subdir ?? '';
 
+        // O --url passado pro "wp core install" fica GRAVADO nas opções
+        // siteurl/home do banco — se não incluir a subpasta aqui, todo
+        // link/asset/ajax que o WordPress gera depois ignora a pasta
+        // pra sempre (é assim que o "instalador de 5 minutos" funciona,
+        // subpasta errada = layout quebrado, não é algo que dê pra
+        // corrigir só trocando a URL que a gente acessa depois).
+        $scheme = $sslActive ? 'https' : 'http';
+        $siteUrl = "{$scheme}://{$domain}".($destPath !== '' ? "/{$destPath}" : '');
+
         $wpConfigContent = WpConfigTemplate::render($dbName, $dbUsername, $dbPassword);
 
         $this->processRunner->installWordPress(
@@ -71,6 +81,7 @@ class InstallWordPressAction implements AgentAction
             root: $root,
             destPath: $destPath,
             downloadUrl: $downloadUrl,
+            siteUrl: $siteUrl,
             dbName: $dbName,
             dbUsername: $dbUsername,
             dbPassword: $dbPassword,
@@ -82,8 +93,8 @@ class InstallWordPressAction implements AgentAction
         );
 
         return [
-            'admin_url' => "http://{$domain}/wp-admin/",
-            'site_url' => "http://{$domain}/",
+            'admin_url' => "{$siteUrl}/wp-admin/",
+            'site_url' => "{$siteUrl}/",
         ];
     }
 }

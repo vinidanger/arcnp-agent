@@ -1,13 +1,17 @@
 #!/bin/bash
-# Uso: install-wordpress.sh <username> <domain> <root> <dest_relpath> <download_url> <db_name> <db_username> <db_password> <admin_user> <admin_password> <admin_email> <site_title>
+# Uso: install-wordpress.sh <username> <domain> <root> <dest_relpath> <download_url> <site_url> <db_name> <db_username> <db_password> <admin_user> <admin_password> <admin_email> <site_title>
 # STDIN = conteúdo pronto do wp-config.php (o PHP já monta a string
 # toda, esse script só grava).
 #
 # root vazio = public_html do domínio principal da conta (mesma
 # convenção de manage-file.sh/manage-archive.sh); senão é
 # domains/{root}/public_html (domínio adicional fora de public_html).
-# domain é sempre o hostname real (usado no --url do wp-cli), mesmo
-# quando root está vazio. Roda como root (mesmo motivo dos outros
+# domain é sempre o hostname real, mesmo quando root está vazio.
+# site_url já vem pronto do PHP (esquema http/https + domínio + pasta,
+# se tiver) — é o que vai pro --url do wp-cli, e fica GRAVADO pra
+# sempre nas opções siteurl/home do WordPress, então tem que estar
+# certo já na primeira instalação (não dá pra "corrigir depois" só
+# acessando outra URL). Roda como root (mesmo motivo dos outros
 # scripts de arquivo: precisa poder ajustar posse de volta pro dono da
 # conta no final) e faz chown -R no destino inteiro ao terminar.
 set -euo pipefail
@@ -17,13 +21,14 @@ DOMAIN="${2:-}"
 ROOT="${3:-}"
 DEST_RELPATH="${4:-}"
 DOWNLOAD_URL="${5:-}"
-DB_NAME="${6:-}"
-DB_USERNAME="${7:-}"
-DB_PASSWORD="${8:-}"
-ADMIN_USER="${9:-}"
-ADMIN_PASSWORD="${10:-}"
-ADMIN_EMAIL="${11:-}"
-SITE_TITLE="${12:-}"
+SITE_URL="${6:-}"
+DB_NAME="${7:-}"
+DB_USERNAME="${8:-}"
+DB_PASSWORD="${9:-}"
+ADMIN_USER="${10:-}"
+ADMIN_PASSWORD="${11:-}"
+ADMIN_EMAIL="${12:-}"
+SITE_TITLE="${13:-}"
 
 if [[ ! "$USERNAME" =~ ^[a-z][a-z0-9]{2,31}$ ]]; then
     echo "Username inválido: $USERNAME" >&2
@@ -32,6 +37,11 @@ fi
 
 if [[ -z "$DOMAIN" ]]; then
     echo "Domínio obrigatório" >&2
+    exit 1
+fi
+
+if [[ -z "$SITE_URL" ]]; then
+    echo "URL do site obrigatória" >&2
     exit 1
 fi
 
@@ -108,7 +118,7 @@ cat > "$DEST/wp-config.php"
 
 php /usr/local/bin/wp-cli.phar core install \
     --path="$DEST" \
-    --url="http://$DOMAIN" \
+    --url="$SITE_URL" \
     --title="$SITE_TITLE" \
     --admin_user="$ADMIN_USER" \
     --admin_password="$ADMIN_PASSWORD" \
