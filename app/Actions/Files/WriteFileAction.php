@@ -22,11 +22,14 @@ class WriteFileAction implements AgentAction
     {
         $username = LinuxUsername::validate($payload['username'] ?? '');
         $path = (string) ($payload['path'] ?? '');
-        $content = $payload['content'] ?? null;
+        // Arquivo vazio é um conteúdo válido pra salvar (ex.: criar o
+        // arquivo e salvar sem digitar nada ainda) — só path é
+        // realmente obrigatório aqui.
+        $content = (string) ($payload['content'] ?? '');
         $root = blank($payload['root'] ?? null) ? null : $payload['root'];
 
-        if ($path === '' || $content === null) {
-            throw new RuntimeException('path e content são obrigatórios.');
+        if ($path === '') {
+            throw new RuntimeException('path é obrigatório.');
         }
 
         $this->processRunner->manageFile($username, 'write', $path, content: $content, root: $root);
