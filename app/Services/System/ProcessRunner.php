@@ -419,6 +419,23 @@ class ProcessRunner
         $this->exec(['sudo', '-n', base_path('scripts/manage-dns-zone.sh'), 'delete-zone', $domain]);
     }
 
+    /**
+     * O vsftpd exige que arquivo dentro de user_config_dir seja dono
+     * de root (checagem própria dele) — diferente do banco de usuários
+     * virtuais (só lido pelo PAM, sem essa checagem), por isso só essa
+     * parte passa por sudo.
+     */
+    public function syncFtpUserConfigs(string $bundle): void
+    {
+        $result = Process::timeout(30)->input($bundle)->run([
+            'sudo', '-n', base_path('scripts/manage-ftp.sh'), 'sync-user-configs',
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Sincronização de configs de FTP falhou: '.trim($result->errorOutput() ?: $result->output()));
+        }
+    }
+
     public function tailNginxLog(string $domain, string $type, int $lines): string
     {
         $result = Process::timeout(30)->run([

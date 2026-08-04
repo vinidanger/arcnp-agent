@@ -1153,32 +1153,39 @@ visudo -c
 
 ## 33. Contas de FTP (vsftpd, usuários virtuais)
 
-Diferente de todo o resto — **sem sudo, sem script novo em `scripts/`**.
-`SyncFtpAccountsAction` (ação `ftp.sync_state`) escreve tudo direto,
-mesmo espírito do `CreateVirtualHostAction`: os diretórios de saída
-são group-writable pro usuário do Agent, só a instalação inicial do
-pacote/serviço (abaixo) exige root, uma vez só.
+**Correção em relação à primeira versão desta seção**: o plano
+original era fazer tudo sem sudo (banco de usuários virtuais E config
+por usuário), mesmo espírito do `CreateVirtualHostAction`. Isso quebrou
+no primeiro deploy real: o vsftpd tem uma checagem própria — recusa
+com `500 OOPS: config file not owned by correct user` se qualquer
+arquivo dentro de `user_config_dir` não for dono de root (senão
+qualquer processo capaz de escrever ali controlaria pra onde um login
+FTP é redirecionado). O banco de usuários virtuais (`virtual_users.db`)
+não tem essa checagem — só é lido pelo PAM — então ele continua sendo
+escrito sem sudo. Já o config por usuário passa por um script sudo
+novo (`manage-ftp.sh`).
 
 Usuário virtual = mapeado pro UID do usuário Linux da própria conta
 (via `guest_username` no config por usuário) — arquivo enviado por FTP
 fica com o mesmo dono que arquivo criado pelo gerenciador de
 arquivos/SSH. **Nenhum restart/reload do vsftpd é necessário** pra
-criar, remover ou trocar senha de conta — o banco de usuários virtuais
-é consultado pelo PAM a cada autenticação, e o config por usuário é
-lido a cada login.
+criar, remover ou trocar senha de conta, nas duas partes — o banco de
+usuários virtuais é consultado pelo PAM a cada autenticação, e o
+config por usuário é lido a cada login.
 
 ```
 dnf install -y vsftpd libdb-utils
 
 mkdir -p /etc/vsftpd/virtual_users /etc/vsftpd/user_conf
-chgrp arcnpagent /etc/vsftpd/virtual_users /etc/vsftpd/user_conf
-chmod 2770 /etc/vsftpd/virtual_users /etc/vsftpd/user_conf
+chgrp arcnpagent /etc/vsftpd/virtual_users
+chmod 2770 /etc/vsftpd/virtual_users
 ```
 
 (`2770`, sem bit de leitura pra "outros" — diferente do `nginx_conf_dir`
-da seção 5, aqui o conteúdo é sensível: hash de senha e caminho interno
-da conta, e contas desse painel têm acesso SSH — não pode vazar pra
-outros usuários do sistema.)
+da seção 5, aqui o conteúdo é sensível: hash de senha, e contas desse
+painel têm acesso SSH — não pode vazar pra outros usuários do sistema.
+`user_conf` NÃO leva `chgrp`/`chmod` especial — fica root:root padrão,
+só o script sudo escreve ali.)
 
 Banco de usuários virtuais vazio inicial (a primeira sincronização
 real do Painel substitui):
@@ -1187,6 +1194,15 @@ real do Painel substitui):
 db_load -T -t hash -f /dev/null /etc/vsftpd/virtual_users/virtual_users.db
 chgrp arcnpagent /etc/vsftpd/virtual_users/virtual_users.db
 chmod 0600 /etc/vsftpd/virtual_users/virtual_users.db
+```
+
+Sudoers (script novo, `manage-ftp.sh` — só a parte de
+`user_config_dir`, o banco continua sem sudo):
+
+```
+chmod +x scripts/manage-ftp.sh
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
 ```
 
 `/etc/pam.d/vsftpd-virtual` — **exatamente essas linhas, nunca

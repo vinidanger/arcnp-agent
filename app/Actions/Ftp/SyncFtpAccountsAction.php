@@ -3,6 +3,7 @@
 namespace App\Actions\Ftp;
 
 use App\Actions\Contracts\AgentAction;
+use App\Services\System\ProcessRunner;
 use App\Support\FtpChrootPath;
 use App\Support\LinuxUsername;
 use Illuminate\Support\Facades\File;
@@ -11,17 +12,24 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * Sem sudo, de propósito — mesmo espírito do CreateVirtualHostAction:
- * os diretórios de saída (ftp_virtual_users_dir/ftp_user_conf_dir) são
- * group-writable pro usuário do Agent (ver deploy/README.md seção 33),
- * então nem o db_load nem a escrita dos configs por usuário precisam
- * de privilégio. NENHUM restart/reload do vsftpd acontece aqui: o
- * banco de usuários virtuais é consultado pelo PAM a cada autenticação
- * e o config por usuário é lido a cada login — CRUD de conta FTP nunca
- * precisa tocar no processo rodando.
+ * O banco de usuários virtuais (virtual_users.db) é escrito sem sudo —
+ * mesmo espírito do CreateVirtualHostAction, o diretório é
+ * group-writable pro usuário do Agent, e só é LIDO pelo PAM (sem
+ * checagem de dono). Já os configs por usuário (user_config_dir)
+ * PRECISAM ser root — o próprio vsftpd recusa (`500 OOPS: config file
+ * not owned by correct user`) se não forem, então essa parte passa
+ * pelo script sudo `manage-ftp.sh` (ver ProcessRunner::syncFtpUserConfigs).
+ * NENHUM restart/reload do vsftpd acontece em nenhuma das duas partes:
+ * o banco é consultado pelo PAM a cada autenticação, e o config por
+ * usuário é lido a cada login — CRUD de conta FTP nunca precisa tocar
+ * no processo rodando.
  */
 class SyncFtpAccountsAction implements AgentAction
 {
+    public function __construct(private ProcessRunner $processRunner)
+    {
+    }
+
     public function isAsync(): bool
     {
         return false;
@@ -96,27 +104,13 @@ class SyncFtpAccountsAction implements AgentAction
     /** @param list<array{ftp_username: string, linux_username: string, local_root: string}> $accounts */
     private function syncUserConfigs(array $accounts): void
     {
-        $dir = config('provisioning.ftp_user_conf_dir');
-        $keep = [];
+        $lines = array_map(
+            fn (array $a) => "{$a['ftp_username']}:{$a['linux_username']}:{$a['local_root']}",
+            $accounts
+        );
 
-        foreach ($accounts as $account) {
-            $path = "{$dir}/{$account['ftp_username']}";
-            $contents = implode("\n", [
-                "guest_username={$account['linux_username']}",
-                "local_root={$account['local_root']}",
-                'write_enable=YES',
-                '',
-            ]);
+        $bundle = implode("\n", $lines).($lines ? "\n" : '');
 
-            File::put($path, $contents);
-            chmod($path, 0600);
-            $keep[] = $path;
-        }
-
-        foreach (File::glob("{$dir}/*") as $existing) {
-            if (! in_array($existing, $keep, true)) {
-                File::delete($existing);
-            }
-        }
+        $this->processRunner->syncFtpUserConfigs($bundle);
     }
 }
