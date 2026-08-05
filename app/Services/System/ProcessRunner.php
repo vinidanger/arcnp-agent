@@ -666,20 +666,30 @@ class ProcessRunner
     {
         $uid = $this->userId($username);
 
+        // Parseado por "Chave=Valor" (sem --value) de propósito — o
+        // systemctl show pode OMITIR uma propriedade da saída (ex.:
+        // CPUQuota some quando nunca foi setada), o que desalinharia
+        // uma leitura posicional tipo "linha 1 = primeira propriedade
+        // pedida". Por chave, a ordem/ausência de qualquer uma nunca
+        // afeta as outras.
         $result = Process::timeout(10)->run([
             'systemctl', 'show', "user-{$uid}.slice",
-            '-p', 'CPUUsageNSec,MemoryCurrent,TasksCurrent', '--value',
+            '-p', 'CPUUsageNSec', '-p', 'MemoryCurrent', '-p', 'TasksCurrent',
         ]);
 
-        $lines = explode("\n", trim($result->output()));
-        $lines = array_pad($lines, 3, '');
+        $values = [];
 
-        $toInt = fn (string $value): ?int => ctype_digit($value) ? (int) $value : null;
+        foreach (explode("\n", trim($result->output())) as $line) {
+            [$key, $value] = array_pad(explode('=', $line, 2), 2, null);
+            $values[$key] = $value;
+        }
+
+        $toInt = fn (?string $value): ?int => $value !== null && ctype_digit($value) ? (int) $value : null;
 
         return [
-            'cpu_usage_ns' => $toInt(trim($lines[0])),
-            'memory_current_bytes' => $toInt(trim($lines[1])),
-            'tasks_current' => $toInt(trim($lines[2])),
+            'cpu_usage_ns' => $toInt($values['CPUUsageNSec'] ?? null),
+            'memory_current_bytes' => $toInt($values['MemoryCurrent'] ?? null),
+            'tasks_current' => $toInt($values['TasksCurrent'] ?? null),
         ];
     }
 
