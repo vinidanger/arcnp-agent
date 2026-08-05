@@ -72,7 +72,7 @@ class IssueSslCertificateAction implements AgentAction
             $contents = $this->templateRenderer->render('nginx-vhost-ssl', [
                 'domain' => $domain,
                 'document_root' => $documentRoot,
-                'php_fpm_socket' => PhpFpmPool::socketPath($username, $phpVersion),
+                'php_fpm_socket' => PhpFpmPool::socketPath($username, $domain),
                 'ssl_cert_path' => $certPath,
                 'ssl_cert_key_path' => $keyPath,
             ]);

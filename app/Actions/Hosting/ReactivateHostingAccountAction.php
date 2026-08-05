@@ -10,6 +10,11 @@ use App\Support\NginxVhost;
 use App\Support\PhpFpmPool;
 use Illuminate\Support\Facades\File;
 
+/**
+ * Religa TODOS os processos PHP-FPM da conta (ver comentário em
+ * SuspendHostingAccountAction — desde PHP por domínio, pode ser mais
+ * de um processo).
+ */
 class ReactivateHostingAccountAction implements AgentAction
 {
     public function __construct(private ProcessRunner $processRunner)
@@ -34,7 +39,10 @@ class ReactivateHostingAccountAction implements AgentAction
 
         $this->processRunner->testNginxConfig();
         $this->processRunner->reloadNginx();
-        $this->processRunner->startPhpFpmService(PhpFpmPool::serviceName($username));
+
+        foreach (PhpFpmPool::allGroupKeysForUsername($username) as $groupKey) {
+            $this->processRunner->startPhpFpmService(PhpFpmPool::serviceName($username, $groupKey));
+        }
 
         return ['username' => $username, 'domain' => $domain, 'suspended' => false];
     }

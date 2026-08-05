@@ -1,5 +1,5 @@
 [Unit]
-Description=Arcn Panel PHP-FPM - {{username}}
+Description=Arcn Panel PHP-FPM - {{username}} ({{group_key}})
 After=network.target
 
 [Service]

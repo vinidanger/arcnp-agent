@@ -1924,3 +1924,87 @@ o `PHP_INI_SCAN_DIR` certo, e rode um `phpinfo()` (ou peça pro
 `php-fpm` da conta via socket) confirmando (a) ionCube aparece
 carregado sem erro, (b) as extensões normais da conta continuam
 aparecendo também, (c) uma SEGUNDA conta sem o toggle não tem ionCube.
+
+## 40. PHP por DOMÍNIO, não mais por conta inteira
+
+Mudança de arquitetura: cada domínio (principal ou adicional/subdomínio)
+agora pode ter sua própria versão de PHP, extensões (normais e Zend) e
+todos os tunáveis (memory_limit, error_reporting etc.), independente
+dos demais domínios da mesma conta — antes (seção 38) era 1 processo
+PHP-FPM só por conta, compartilhado por todos os domínios dela.
+
+**Identidade do processo mestre passa a ser "grupo"**, não mais só a
+conta: um grupo é (versão de PHP + assinatura das zend_extensions
+selecionadas). Domínios com a MESMA versão E o MESMO conjunto de
+zend_extensions continuam agrupados no MESMO processo (evita 1
+processo por domínio à toa quando vários usam a configuração idêntica,
+que é o caso comum); domínios que divergem em versão OU em
+zend_extensions ganham processos separados. Isso não é opcional —
+`PHP_INI_SCAN_DIR` (usado pelo mecanismo de zend_extension por domínio,
+seção 39) é uma variável de ambiente do PROCESSO inteiro, não
+escopável por pool individual, então dois domínios com zend_extensions
+diferentes NUNCA podem compartilhar processo.
+
+- `arcnp-php-{username}-{grupo}.service` (nome do unit) e
+  `{username}-{grupo}.conf` (config) — `{grupo}` é a versão sem ponto
+  (ex. `83`) mais, se houver zend_extensions, um sufixo hash curto
+  (ex. `83-za1b2c3d`). Cada `.conf` agora tem 1 seção `[global]` +
+  UM BLOCO `[domínio]` por domínio daquele grupo (antes era só 1 bloco
+  fixo `[{{username}}]`).
+- **Socket passa a ser por domínio, não mais por conta nem por
+  versão**: `/run/arcnp-php/{username}--{domínio}.sock`. Consequência
+  importante: trocar a versão de PHP (ou as zend_extensions) de um
+  domínio NUNCA mais precisa reescrever o vhost nginx dele — o socket
+  nem muda, só os processos PHP-FPM por trás são resincronizados.
+- **Um Action síncrono só** (`php.sync_account_pools`,
+  `SyncAccountPhpPoolsAction`) substitui os cinco antigos da seção 38
+  (`php.create_pool`/`delete_pool`/`switch_version`/
+  `update_pool_settings`/`update_zend_extensions`, todos removidos do
+  `ActionRegistry`). Recebe sempre o estado COMPLETO da conta (todo
+  domínio, principal incluso, cada um com sua própria versão/settings)
+  — mesmo padrão "resync total" já usado por e-mail/FTP/cron/DNS.
+  Agrupa por (versão, zend_extensions sanitizadas), escreve/aplica um
+  `.conf`+`.service` por grupo presente, e PARA+REMOVE qualquer grupo
+  que ficou sem nenhum domínio (descoberto via glob dos `.conf`
+  existentes, não precisa de estado próprio).
+- **Suspender/reativar conta** agora para/religa TODOS os processos da
+  conta (pode ser mais de um), não só um nome fixo —
+  `PhpFpmPool::allGroupKeysForUsername()` descobre via glob.
+- **Cgroup (Fase 5) continua intacto**: cada processo (agora por
+  grupo, não só por conta) continua com `Slice=user-{uid}.slice` — os
+  limites de CPU/RAM/processos por conta continuam somando certo entre
+  múltiplos processos da MESMA conta.
+
+**Migração de contas existentes** (comando novo, Painel,
+`php artisan php-fpm:migrate-to-per-domain-pools`, rodado manualmente
+uma vez, mesmo padrão de cautela da seção 38): cria os processos novos
+(caminho novo, não colide com o `arcnp-php-{username}.service` antigo
+sem sufixo de grupo) e re-renderiza o vhost de cada domínio pra apontar
+pro socket novo (`--{domínio}.sock`). Não apaga nada da arquitetura
+antiga — limpeza manual, só depois de confirmar que tudo subiu.
+
+**Achado real durante a implementação (bug de PHP, não de lógica)**:
+chave de array numérica-string (ex. `"83"`) é automaticamente
+convertida pra `int` pelo PHP ao ser usada como chave de array
+(`$groups['83']` vira `$groups[83]`) — isso quebrava a checagem de
+"grupo órfão" (`in_array($groupKey, $currentGroupKeys, true)`,
+comparação ESTRITA) logo na primeira sincronização: o grupo recém
+criado (chave `int(83)`) nunca batia contra as chaves sempre-string
+vindas do glob dos arquivos `.conf` (`string(83)`), então era apagado
+como "órfão" na mesma execução em que foi criado. Corrigido com um
+`(string)` explícito no ponto de coleta. Pego em sandbox local (ver
+verificação abaixo) — nunca chegou a ir pra VPS assim.
+
+**Teste pós-deploy**: crie um domínio adicional numa versão de PHP
+DIFERENTE da conta principal, confirme que aparecem 2 units
+`arcnp-php-{username}-*.service` ativos (`systemctl list-units
+'arcnp-php-{username}-*'`), que cada domínio responde pela versão
+certa (`phpinfo()` ou `php -v` via socket), e que trocar a versão de
+UM domínio não derruba nem reinicia o processo do outro. Ative uma
+zend_extension só num domínio e confirme que um domínio IRMÃO na MESMA
+versão mas SEM a extensão ganha um processo separado (unit com sufixo
+`-z...`). Suspenda a conta e confirme que TODOS os processos param;
+reative e confirme que todos voltam. Rode
+`php artisan php-fpm:migrate-to-per-domain-pools` numa conta antiga
+(criada antes desta feature) e confirme que ela migra sem downtime
+visível.

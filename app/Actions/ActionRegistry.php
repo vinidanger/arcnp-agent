@@ -34,13 +34,9 @@ use App\Actions\Mail\DeleteMailDkimAction;
 use App\Actions\Mail\SyncMailDkimAction;
 use App\Actions\Mail\SyncMailStateAction;
 use App\Actions\Mail\TailMailLogAction;
-use App\Actions\Php\CreatePhpFpmPoolAction;
-use App\Actions\Php\DeletePhpFpmPoolAction;
 use App\Actions\Php\ListPhpExtensionsAction;
-use App\Actions\Php\SwitchPhpVersionAction;
+use App\Actions\Php\SyncAccountPhpPoolsAction;
 use App\Actions\Php\TogglePhpExtensionAction;
-use App\Actions\Php\UpdatePhpFpmPoolSettingsAction;
-use App\Actions\Php\UpdateZendExtensionsAction;
 use App\Actions\Resources\GetResourceUsageAction;
 use App\Actions\Resources\SetResourceLimitsAction;
 use App\Actions\Server\CollectServerInfoAction;
@@ -80,8 +76,7 @@ class ActionRegistry
         'linux.delete_user' => DeleteSystemUserAction::class,
         'web.create_vhost' => CreateVirtualHostAction::class,
         'web.delete_vhost' => DeleteVirtualHostAction::class,
-        'php.create_pool' => CreatePhpFpmPoolAction::class,
-        'php.delete_pool' => DeletePhpFpmPoolAction::class,
+        'php.sync_account_pools' => SyncAccountPhpPoolsAction::class,
         'database.create_mysql' => CreateMysqlDatabaseAction::class,
         'database.delete_mysql' => DeleteMysqlDatabaseAction::class,
         'hosting.suspend' => SuspendHostingAccountAction::class,
@@ -90,9 +85,6 @@ class ActionRegistry
         'ssl.renew_all' => RenewAllSslCertificatesAction::class,
         'web.create_addon_domain' => CreateAddonDomainAction::class,
         'web.delete_addon_domain' => DeleteAddonDomainAction::class,
-        'php.switch_version' => SwitchPhpVersionAction::class,
-        'php.update_pool_settings' => UpdatePhpFpmPoolSettingsAction::class,
-        'php.update_zend_extensions' => UpdateZendExtensionsAction::class,
         'php.list_extensions' => ListPhpExtensionsAction::class,
         'php.toggle_extension' => TogglePhpExtensionAction::class,
         'web.update_vhost_php_version' => UpdateVirtualHostPhpVersionAction::class,

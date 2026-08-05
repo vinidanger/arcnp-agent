@@ -1,0 +1,4 @@
+[global]
+pid = /run/arcnp-php/{{username}}-{{group_key}}.pid
+error_log = {{home_dir}}/logs/php-fpm-{{group_key}}.log
+daemonize = no

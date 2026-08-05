@@ -16,11 +16,15 @@ use App\Support\Subdirectory;
 use Illuminate\Support\Facades\File;
 
 /**
- * Reescreve um vhost já existente só pra apontar pro socket da nova
- * versão de PHP — roda uma vez por domínio da conta (principal +
- * adicionais/subdomínios), depois que o pool novo (SwitchPhpVersionAction)
- * já existe. Preserva o bloco SSL se o domínio já tiver certificado
- * ativo (senão perderia o HTTPS ao trocar de versão).
+ * Reescreve um vhost já existente pra apontar pro socket certo do
+ * domínio — preserva o bloco SSL se ele já tiver certificado ativo.
+ * Desde que PHP passou a ser por domínio, o socket (PhpFpmPool::
+ * socketPath()) só depende do domínio, nunca da versão de PHP — trocar
+ * a versão de um domínio (SyncAccountPhpPoolsAction) NUNCA precisa
+ * mais reescrever o vhost dele. Essa Action continua existindo pra
+ * outros gatilhos que ainda re-renderizam o vhost inteiro (o comando
+ * de migração `php-fpm:migrate-to-per-domain-pools`, que precisa
+ * repontar vhosts antigos pro esquema de socket novo).
  */
 class UpdateVirtualHostPhpVersionAction implements AgentAction
 {
@@ -48,7 +52,7 @@ class UpdateVirtualHostPhpVersionAction implements AgentAction
 
         $homeDir = config('provisioning.home_base_dir')."/{$username}";
         $documentRoot = DocumentRoot::resolve($homeDir, $domain, $location, $subdir, $publicPath);
-        $socketPath = PhpFpmPool::socketPath($username, $phpVersion);
+        $socketPath = PhpFpmPool::socketPath($username, $domain);
 
         if ($sslActive) {
             $contents = $this->templateRenderer->render('nginx-vhost-ssl', [

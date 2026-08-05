@@ -3,21 +3,18 @@
 namespace App\Support;
 
 /**
- * Monta as variáveis do stub php-fpm-account.stub (config global+pool
- * combinada) — reaproveitado por CreatePhpFpmPoolAction,
- * SwitchPhpVersionAction e UpdatePhpFpmPoolSettingsAction pra não
- * triplicar o merge de defaults/overrides nos três. $overrides
- * ausente/vazio = usa config('provisioning.default_pool_settings')
- * integralmente. "binary"/"config_path" aqui servem pro
- * php-fpm-account.service.stub (unit systemd), não pro próprio
- * arquivo de config do FPM.
+ * Monta as variáveis dos stubs de PHP-FPM — reaproveitado por
+ * SyncAccountPhpPoolsAction pra montar tanto a seção [global] (uma vez
+ * por processo mestre, chave = conta+versão) quanto cada bloco de pool
+ * (uma vez por domínio, chave = domínio). $overrides ausente/vazio =
+ * usa config('provisioning.default_pool_settings') integralmente.
  */
 class PhpFpmPoolSettings
 {
     /**
-     * Precisa bater exatamente com os placeholders {{...}} do stub e com
-     * as chaves de config('provisioning.default_pool_settings') — o
-     * Painel monta $overrides com esses mesmos nomes (ver
+     * Precisa bater exatamente com os placeholders {{...}} do stub de
+     * pool e com as chaves de config('provisioning.default_pool_settings')
+     * — o Painel monta $overrides com esses mesmos nomes (ver
      * HostingAccountProvisioningService::formatPoolSettings).
      */
     public const TUNABLE_KEYS = [
@@ -60,11 +57,11 @@ class PhpFpmPoolSettings
     }
 
     /**
-     * "extra_extensions" é por conta, diferente do resto do gerenciamento
-     * de extensões (que é por servidor/versão, ver PhpExtensionController
-     * no Painel) — não dá pra usar um whitelist estático como
-     * DISABLABLE_FUNCTIONS porque "quais extensões existem" varia por
-     * servidor. Em vez disso revalida contra
+     * "extra_extensions" é por domínio, diferente do resto do
+     * gerenciamento de extensões (que é por servidor/versão, ver
+     * PhpExtensionController no Painel) — não dá pra usar um whitelist
+     * estático como DISABLABLE_FUNCTIONS porque "quais extensões
+     * existem" varia por servidor. Em vez disso revalida contra
      * PhpExtensionList::availableForPerAccountOptIn(), que já garante que
      * só extensões "extension" (não zend) e atualmente desativadas a
      * nível de servidor entram na lista — exatamente o conjunto seguro
@@ -94,7 +91,7 @@ class PhpFpmPoolSettings
     }
 
     /**
-     * "zend_extensions" é ativado via um php.ini próprio da conta,
+     * "zend_extensions" é ativado via um php.ini próprio do domínio,
      * scaneado antes do diretório padrão da versão (ver
      * buildZendIniLines() e App\Support\PhpFpmPool::applyZendIni()),
      * não via php_admin_value — zend_extension só pode ser setado no
@@ -112,25 +109,25 @@ class PhpFpmPoolSettings
     }
 
     /**
-     * Monta o conteúdo do ini próprio da conta — uma linha
+     * Monta o conteúdo do ini próprio do domínio — uma linha
      * "zend_extension={valor real}" por extensão selecionada. Usa o
      * "zend_directive" de PhpExtensionList (o nome real do .so lido do
      * arquivo original), não "{name}.so" — o ioncube, por exemplo, tem
      * sufixo de versão no arquivo (ioncube_loader_lin_8.3.so), que não
      * bate com o "name" amigável ("ioncube"). String vazia se nenhuma
      * extensão selecionada (nesse caso App\Support\PhpFpmPool::applyZendIni()
-     * remove o diretório da conta em vez de escrever um ini vazio).
+     * remove o diretório do domínio em vez de escrever um ini vazio).
      *
      * Descartei a abordagem anterior (flag "-d zend_extension=..." no
      * ExecStart) depois de confirmar em produção que o ioncube_loader
      * recusa carregar assim — ele exige aparecer como a PRIMEIRA
      * entrada dentro de um php.ini de verdade, e diretivas via -d são
      * processadas tarde demais pro check interno dele. Um diretório de
-     * scan próprio da conta, listado ANTES do diretório padrão da
+     * scan próprio do domínio, listado ANTES do diretório padrão da
      * versão em PHP_INI_SCAN_DIR, resolve isso sem perder nem duplicar
      * nenhuma configuração do php.ini principal nem do scan padrão.
      */
-    private static function buildZendIniLines(string $phpVersion, string $value): string
+    public static function buildZendIniLines(string $phpVersion, string $value): string
     {
         $names = array_filter(array_map('trim', explode(',', $value)));
 
@@ -146,18 +143,43 @@ class PhpFpmPoolSettings
     }
 
     /**
+     * Variáveis da seção [global] — uma vez por processo MESTRE (chave
+     * = grupo, ver PhpFpmPool::processGroupKey()). "group_key" entra no
+     * caminho do pid/log pra não colidir entre processos da MESMA
+     * conta rodando ao mesmo tempo (versões diferentes, ou mesma
+     * versão com zend_extensions diferentes).
+     *
      * @return array<string, string>
      */
-    public static function variables(string $username, string $phpVersion, array $overrides = []): array
+    public static function globalVariables(string $username, string $groupKey, string $phpVersion): array
+    {
+        return [
+            'username' => $username,
+            'group_key' => $groupKey,
+            'home_dir' => config('provisioning.home_base_dir')."/{$username}",
+            'binary' => PhpVersion::config($phpVersion)['binary'],
+            'config_path' => PhpFpmPool::configPath($username, $groupKey),
+        ];
+    }
+
+    /**
+     * Variáveis de UM bloco de pool — uma vez por DOMÍNIO. "domain" vira
+     * o nome da seção "[{{domain}}]" no .conf E a chave do socket (ver
+     * PhpFpmPool::socketPath()) — só depende de domínio, nunca de
+     * versão, então trocar a versão de um domínio nunca precisa
+     * reescrever o vhost nginx dele.
+     *
+     * @return array<string, string>
+     */
+    public static function variables(string $username, string $domain, string $phpVersion, array $overrides = []): array
     {
         $defaults = config('provisioning.default_pool_settings');
 
         $variables = [
+            'domain' => $domain,
             'username' => $username,
-            'socket_path' => PhpFpmPool::socketPath($username, $phpVersion),
-            'config_path' => PhpFpmPool::configPath($username),
+            'socket_path' => PhpFpmPool::socketPath($username, $domain),
             'home_dir' => config('provisioning.home_base_dir')."/{$username}",
-            'binary' => PhpVersion::config($phpVersion)['binary'],
         ];
 
         foreach (self::TUNABLE_KEYS as $key) {
@@ -169,11 +191,9 @@ class PhpFpmPoolSettings
         $variables['extra_extensions_lines'] = self::renderExtraExtensionsLines($variables['extra_extensions']);
         $variables['zend_extensions'] = self::sanitizeZendExtensions($phpVersion, (string) $variables['zend_extensions']);
         // "zend_ini_lines" é só o CONTEÚDO a escrever (ou não) no ini
-        // próprio da conta — quem decide o Environment=PHP_INI_SCAN_DIR
-        // do unit é a Action que chama variables(), depois de gravar
-        // (ou remover) o arquivo via PhpFpmPool::applyZendIni(). Fica
-        // fora do stub .service diretamente, diferente do resto das
-        // TUNABLE_KEYS (que vão direto pro placeholder).
+        // próprio do domínio — quem decide o Environment=PHP_INI_SCAN_DIR
+        // do pool é o Action que chama variables(), depois de gravar (ou
+        // remover) o arquivo via PhpFpmPool::applyZendIni().
         $variables['zend_ini_lines'] = self::buildZendIniLines($phpVersion, $variables['zend_extensions']);
 
         return $variables;

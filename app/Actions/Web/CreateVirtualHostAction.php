@@ -53,7 +53,7 @@ class CreateVirtualHostAction implements AgentAction
         $contents = $this->templateRenderer->render('nginx-vhost', [
             'domain' => $domain,
             'document_root' => $documentRoot,
-            'php_fpm_socket' => PhpFpmPool::socketPath($username, $phpVersion),
+            'php_fpm_socket' => PhpFpmPool::socketPath($username, $domain),
         ]);
 
         File::put($configPath, $contents);

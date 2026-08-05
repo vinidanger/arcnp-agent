@@ -49,7 +49,7 @@ class UpdateDocumentRootAction implements AgentAction
 
         $homeDir = config('provisioning.home_base_dir')."/{$username}";
         $documentRoot = DocumentRoot::resolve($homeDir, $domain, $location, $subdir, $publicPath);
-        $socketPath = PhpFpmPool::socketPath($username, $phpVersion);
+        $socketPath = PhpFpmPool::socketPath($username, $domain);
 
         if ($sslActive) {
             $contents = $this->templateRenderer->render('nginx-vhost-ssl', [

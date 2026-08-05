@@ -12,11 +12,12 @@ use Illuminate\Support\Facades\File;
 
 /**
  * Desativa vhost (renomeia pra fora do padrão que o nginx carrega) e
- * para o processo PHP-FPM dedicado da conta — sem apagar nada, é
- * reversível pela ReactivateHostingAccountAction. Diferente de antes
- * (quando o pool era renomeado dentro de um service compartilhado),
- * agora a conta tem o próprio unit systemd, então "suspender o PHP" é
- * só parar o unit dela — nenhum outro processo é afetado.
+ * para TODOS os processos PHP-FPM da conta — sem apagar nada, é
+ * reversível pela ReactivateHostingAccountAction. Desde que PHP passou
+ * a ser por domínio (não mais 1 processo só por conta), uma conta pode
+ * ter vários processos ao mesmo tempo (um por grupo versão+
+ * zend_extensions em uso, ver PhpFpmPool) — precisa descobrir e parar
+ * todos, não só um nome fixo.
  */
 class SuspendHostingAccountAction implements AgentAction
 {
@@ -42,7 +43,10 @@ class SuspendHostingAccountAction implements AgentAction
 
         $this->processRunner->testNginxConfig();
         $this->processRunner->reloadNginx();
-        $this->processRunner->stopPhpFpmService(PhpFpmPool::serviceName($username));
+
+        foreach (PhpFpmPool::allGroupKeysForUsername($username) as $groupKey) {
+            $this->processRunner->stopPhpFpmService(PhpFpmPool::serviceName($username, $groupKey));
+        }
 
         return ['username' => $username, 'domain' => $domain, 'suspended' => true];
     }
