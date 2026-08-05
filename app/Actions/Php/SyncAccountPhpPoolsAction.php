@@ -33,11 +33,12 @@ use Illuminate\Support\Facades\File;
  * usado no rollback/exclusão de conta).
  *
  * Ao final, também atualiza o ~/.bashrc da conta (ver
- * buildCliZendProfileBlock()/ProcessRunner::updateCliZendProfile())
- * pra que zend_extension ativa em algum domínio valha também pro PHP
- * CLI via SSH da conta — sem isso, `php artisan` (ou qualquer script
- * dependente de ioncube) rodado via SSH usaria o php.ini padrão do
- * sistema, sem a extensão, mesmo com o site funcionando certo.
+ * buildCliExtensionsProfileBlock()/ProcessRunner::updateCliZendProfile())
+ * pra que zend_extension E extra_extensions ativas em algum domínio
+ * valham também pro PHP CLI via SSH da conta — sem isso, `php artisan`
+ * (ou qualquer script dependente dessas extensões) rodado via SSH
+ * usaria o php.ini padrão do sistema, sem elas, mesmo com o site
+ * funcionando certo.
  */
 class SyncAccountPhpPoolsAction implements AgentAction
 {
@@ -58,6 +59,11 @@ class SyncAccountPhpPoolsAction implements AgentAction
         $domainPayloads = $payload['domains'] ?? [];
 
         $groups = [];
+        // Extensões "extra" (não-zend) agrupadas por VERSÃO — não
+        // afetam o agrupamento de processo (só zend_extension exige
+        // isolamento, ver classe PhpFpmPool), mas entram no wrapper de
+        // CLI (buildCliExtensionsProfileBlock()) igual as zend.
+        $versionExtraExtensions = [];
 
         foreach ($domainPayloads as $item) {
             $domain = DomainName::validate($item['domain'] ?? '');
@@ -71,12 +77,17 @@ class SyncAccountPhpPoolsAction implements AgentAction
             $groups[$groupKey]['php_version'] = $phpVersion;
             $groups[$groupKey]['zend_csv'] = $zendCsv;
             $groups[$groupKey]['domains'][] = ['domain' => $domain, 'settings' => $settings];
+
+            $extraCsv = PhpFpmPoolSettings::sanitizeExtraExtensions($phpVersion, (string) ($settings['extra_extensions'] ?? ''));
+            foreach (array_filter(array_map('trim', explode(',', $extraCsv))) as $extension) {
+                $versionExtraExtensions[$phpVersion][$extension] = true;
+            }
         }
 
         $syncedGroupKeys = [];
         // Zend dirs agrupados por VERSÃO (não por grupo) — usado só pra
-        // montar o wrapper de CLI (updateCliZendProfile()) mais abaixo,
-        // que é por versão/comando (php81, php82...), não por grupo.
+        // montar o wrapper de CLI mais abaixo, que é por versão/comando
+        // (php81, php82...), não por grupo.
         $versionZendDirs = [];
 
         foreach ($groups as $groupKey => $group) {
@@ -96,7 +107,9 @@ class SyncAccountPhpPoolsAction implements AgentAction
         }
 
         $this->removeOrphanedGroups($username, $syncedGroupKeys);
-        $this->processRunner->updateCliZendProfile($username, $this->buildCliZendProfileBlock($versionZendDirs));
+
+        $extensionsBlock = $this->buildCliExtensionsProfileBlock($versionZendDirs, $versionExtraExtensions);
+        $this->processRunner->updateCliZendProfile($username, $extensionsBlock);
 
         return ['username' => $username, 'groups' => $syncedGroupKeys];
     }
@@ -135,31 +148,48 @@ class SyncAccountPhpPoolsAction implements AgentAction
 
     /**
      * Monta o bloco de wrappers de shell (um por versão de PHP com
-     * zend_extension ativa em algum domínio da conta) que ativam o
-     * PHP_INI_SCAN_DIR também no CLI via SSH — mesmo raciocínio do FPM
-     * (ver applyGroup()), só que aqui é por VERSÃO (o CLI não tem
-     * conceito de "domínio"), então usa a UNIÃO de todos os diretórios
-     * de zend daquela versão entre os domínios da conta. "command
-     * {$cli}" (não o caminho direto do binário) evita depender de
-     * saber o caminho exato — deixa o PATH da conta resolver, e evita
-     * a função recursar nela mesma.
+     * zend_extension E/OU extra_extensions ativas em algum domínio da
+     * conta) que ativam essas extensões também no CLI via SSH — mesmo
+     * raciocínio do FPM (ver applyGroup()), só que aqui é por VERSÃO (o
+     * CLI não tem conceito de "domínio"), então usa a UNIÃO de tudo
+     * daquela versão entre os domínios da conta.
+     *
+     * zend_extension precisa do diretório de scan (PHP_INI_SCAN_DIR,
+     * ver comentário da classe) — extra_extensions (redis, intl etc.)
+     * são mais simples, entram direto como flag "-d extension=X.so" no
+     * comando (sem a exigência de ordem que o ionCube tem, isso
+     * funciona sem problema). "command {$cli}" (não o caminho direto
+     * do binário) evita depender de saber o caminho exato — deixa o
+     * PATH da conta resolver, e evita a função recursar nela mesma.
      *
      * @param  array<string, list<string>>  $versionZendDirs
+     * @param  array<string, array<string, bool>>  $versionExtraExtensions
      */
-    private function buildCliZendProfileBlock(array $versionZendDirs): string
+    private function buildCliExtensionsProfileBlock(array $versionZendDirs, array $versionExtraExtensions): string
     {
+        $versions = array_unique(array_merge(array_keys($versionZendDirs), array_keys($versionExtraExtensions)));
         $lines = [];
 
-        foreach ($versionZendDirs as $phpVersion => $dirs) {
+        foreach ($versions as $phpVersion) {
             $config = PhpVersion::config($phpVersion);
             $cli = $config['cli_command'] ?? null;
+            $zendDirs = $versionZendDirs[$phpVersion] ?? [];
+            $extraExtensions = array_keys($versionExtraExtensions[$phpVersion] ?? []);
 
-            if ($cli === null || empty($dirs)) {
+            if ($cli === null || (empty($zendDirs) && empty($extraExtensions))) {
                 continue;
             }
 
-            $scanDir = implode(':', array_unique($dirs)).':'.$config['ini_dir'];
-            $lines[] = "{$cli}() { PHP_INI_SCAN_DIR=\"{$scanDir}\" command {$cli} \"\$@\"; }";
+            $prefix = '';
+
+            if (! empty($zendDirs)) {
+                $scanDir = implode(':', array_unique($zendDirs)).':'.$config['ini_dir'];
+                $prefix .= "PHP_INI_SCAN_DIR=\"{$scanDir}\" ";
+            }
+
+            $flags = implode('', array_map(fn (string $ext) => " -d extension={$ext}.so", $extraExtensions));
+
+            $lines[] = "{$cli}() { {$prefix}command {$cli}{$flags} \"\$@\"; }";
         }
 
         return implode("\n", $lines);

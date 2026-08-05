@@ -2009,7 +2009,7 @@ reative e confirme que todos voltam. Rode
 (criada antes desta feature) e confirme que ela migra sem downtime
 visível.
 
-## 41. zend_extension também no PHP CLI (via SSH)
+## 41. zend_extension e extra_extensions também no PHP CLI (via SSH)
 
 Achado real em produção: um domínio com ioncube ativo funcionava certo
 via web (PHP-FPM), mas `php artisan ...` rodado via SSH continuava
@@ -2021,14 +2021,21 @@ sistema, que nunca passa por esse unit, então nunca vê a variável.
 Corrigido escrevendo um bloco gerenciado (marcadores
 `# BEGIN/END ARCNP-PHP-CLI`, nunca mexe no resto do arquivo) no
 `~/.bashrc` da conta, toda vez que `SyncAccountPhpPoolsAction` roda —
-um wrapper de shell por VERSÃO de PHP que tem zend_extension ativa em
-PELO MENOS UM domínio da conta (o CLI não tem conceito de "domínio", só
-de comando — `php`, `php81`, `php82`, `php84` —, então usa a UNIÃO de
-todos os diretórios de zend daquela versão entre os domínios):
+um wrapper de shell por VERSÃO de PHP que tem zend_extension E/OU
+extra_extensions ativas em PELO MENOS UM domínio da conta (o CLI não
+tem conceito de "domínio", só de comando — `php`, `php81`, `php82`,
+`php84` —, então usa a UNIÃO de tudo daquela versão entre os domínios).
+**Segundo achado, mesmo dia**: ativar só o ionCube não bastava — um
+domínio com `intl` habilitado como extra_extension (via
+`php_admin_value[extension]`, só vale pro pool FPM) continuava sem
+`NumberFormatter` no CLI, porque o `-d` não tem o mesmo problema de
+ordem que o zend_extension (não precisa ser "o primeiro"), então
+`extra_extensions` entra como flag simples `-d extension=X.so` no
+próprio wrapper, sem precisar de diretório de scan:
 
 ```bash
 # BEGIN ARCNP-PHP-CLI (gerado automaticamente pelo Painel — não editar)
-php() { PHP_INI_SCAN_DIR="/etc/arcnp-php/testehos-83-za1b2c3d4-zend.d:/etc/php.d" command php "$@"; }
+php() { PHP_INI_SCAN_DIR="/etc/arcnp-php/testehos-83-za1b2c3d4-zend.d:/etc/php.d" command php -d extension=intl.so "$@"; }
 # END ARCNP-PHP-CLI
 ```
 
@@ -2036,8 +2043,9 @@ php() { PHP_INI_SCAN_DIR="/etc/arcnp-php/testehos-83-za1b2c3d4-zend.d:/etc/php.d
 recursar nela mesma e evita depender de saber o caminho exato de cada
 versão — usa o que já está no PATH da conta (os comandos `php81`/
 `php82`/`php84` já existem por causa do Remi, ver seção 14). Conta sem
-NENHUMA zend_extension em lugar nenhum não ganha bloco nenhum (e se já
-tinha um bloco de uma configuração anterior, ele é removido).
+NENHUMA zend_extension/extra_extension em lugar nenhum não ganha bloco
+nenhum (e se já tinha um bloco de uma configuração anterior, ele é
+removido).
 
 **Novo, requer instalação do script + sudoers**:
 
@@ -2053,13 +2061,15 @@ visudo -c
 inteiro — reaproveita o mesmo passo já documentado nas seções
 anteriores, cobre a linha nova também.)
 
-**Teste pós-deploy**: ative uma zend_extension num domínio de teste,
-confirme que o `~/.bashrc` da conta ganhou o bloco (`cat
-~/.bashrc` via SSH como a própria conta, ou `su - {username} -c 'cat
-~/.bashrc'` como root — **atenção**: `su -` pode não carregar uma
-sessão PAM/logind nova nessa VPS, comportamento já documentado como
-pegadinha de metodologia na Fase 5; prefira testar via SSH real). Rode
-`php -v` (ou `php artisan` de um projeto que dependa de ionCube) via
-SSH e confirme que funciona sem erro. Desative a extensão de novo e
-confirme que o bloco some do `~/.bashrc` e o `php -v` volta a reportar
-sem ionCube.
+**Teste pós-deploy**: ative uma zend_extension e uma extra_extension
+(ex. ioncube + intl) num domínio de teste, confirme que o `~/.bashrc`
+da conta ganhou o bloco com ambas (`cat ~/.bashrc` via SSH como a
+própria conta — **atenção**: `su -` pode não carregar uma sessão
+PAM/logind nova nessa VPS, comportamento já documentado como pegadinha
+de metodologia na Fase 5, e além disso uma sessão SSH JÁ ABERTA antes
+do resync não vê o `.bashrc` novo — precisa reconectar). Rode
+`php artisan` (ou qualquer script que dependa dessas extensões) via
+SSH e confirme que funciona sem erro — tanto o de ionCube quanto o de
+classe ausente da extensão normal (ex. `NumberFormatter` do intl).
+Desative as extensões de novo e confirme que o bloco some do
+`~/.bashrc` e os erros voltam a aparecer.
