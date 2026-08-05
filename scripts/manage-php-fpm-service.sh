@@ -6,19 +6,23 @@
 #   manage-php-fpm-service.sh <unit> stop
 #   manage-php-fpm-service.sh <unit> start
 #
-# Unit systemd DEDICADO por conta de hospedagem (1 processo mestre de
-# PHP-FPM por conta, não mais compartilhado por versão) — precisa de
-# root pra escrever em /etc/systemd/system/ e chamar daemon-reload/
-# enable/disable, mesmo raciocínio do manage-app.sh (unit por app
-# Node/Python). "apply" serve tanto pra criar quanto pra atualizar
-# (troca de versão de PHP muda o ExecStart) — sempre idempotente:
-# escreve + habilita + reinicia, nunca assume estado anterior.
+# Unit systemd DEDICADO por GRUPO (versão de PHP + assinatura das
+# zend_extensions em uso, ver PhpFpmPool::processGroupKey() no Agent —
+# uma conta pode ter mais de um processo, um por grupo distinto entre
+# os domínios dela) — precisa de root pra escrever em
+# /etc/systemd/system/ e chamar daemon-reload/enable/disable, mesmo
+# raciocínio do manage-app.sh (unit por app Node/Python). "apply" serve
+# tanto pra criar quanto pra atualizar (troca de versão de PHP muda o
+# ExecStart) — sempre idempotente: escreve + habilita + reinicia, nunca
+# assume estado anterior.
 set -euo pipefail
 
 UNIT="${1:-}"
 OPERATION="${2:-}"
 
-if [[ ! "$UNIT" =~ ^arcnp-php-[a-z][a-z0-9]{2,31}\.service$ ]]; then
+# Formato: arcnp-php-{username}-{versão sem ponto}[-z{hash8}].service
+# ex.: arcnp-php-testehos-83.service, arcnp-php-testehos-83-za1b2c3d4.service
+if [[ ! "$UNIT" =~ ^arcnp-php-[a-z][a-z0-9]{2,31}-[0-9]+(-z[0-9a-f]{8})?\.service$ ]]; then
     echo "Nome de unit inválido: $UNIT" >&2
     exit 1
 fi
