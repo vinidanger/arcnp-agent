@@ -5,11 +5,13 @@ namespace App\Actions\Web;
 use App\Actions\Contracts\AgentAction;
 use App\Services\System\ProcessRunner;
 use App\Services\System\TemplateRenderer;
+use App\Support\DocumentRoot;
 use App\Support\DomainName;
 use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
 use App\Support\PhpFpmPool;
 use App\Support\PhpVersion;
+use App\Support\Subdirectory;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
 
@@ -38,9 +40,10 @@ class CreateVirtualHostAction implements AgentAction
         $domain = DomainName::validate($payload['domain'] ?? '');
         $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
         PhpVersion::config($phpVersion);
+        $publicPath = blank($payload['public_path'] ?? null) ? null : Subdirectory::validate($payload['public_path']);
 
         $homeDir = config('provisioning.home_base_dir')."/{$username}";
-        $documentRoot = "{$homeDir}/public_html";
+        $documentRoot = DocumentRoot::resolve($homeDir, $domain, null, null, $publicPath);
         $configPath = NginxVhost::configPath($domain);
 
         if (File::exists($configPath)) {

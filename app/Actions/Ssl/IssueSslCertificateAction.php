@@ -44,9 +44,10 @@ class IssueSslCertificateAction implements AgentAction
         $subdir = blank($payload['subdir'] ?? null) ? null : Subdirectory::validate($payload['subdir']);
         $location = ($payload['location'] ?? null) === 'outside' ? 'outside' : null;
         $mode = ($payload['mode'] ?? 'php') === 'app' ? 'app' : 'php';
+        $publicPath = blank($payload['public_path'] ?? null) ? null : Subdirectory::validate($payload['public_path']);
 
         $homeDir = config('provisioning.home_base_dir')."/{$username}";
-        $documentRoot = DocumentRoot::resolve($homeDir, $domain, $location, $subdir);
+        $documentRoot = $mode === 'app' ? DocumentRoot::resolve($homeDir, $domain, $location, $subdir) : DocumentRoot::resolve($homeDir, $domain, $location, $subdir, $publicPath);
 
         $expiresAt = $this->processRunner->issueSslCertificate($domain, $documentRoot);
 

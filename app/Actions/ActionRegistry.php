@@ -61,6 +61,7 @@ use App\Actions\Web\SyncHotlinkProtectionAction;
 use App\Actions\Web\SyncMimeTypesAction;
 use App\Actions\Web\SyncRedirectsAction;
 use App\Actions\Web\TailDomainLogAction;
+use App\Actions\Web\UpdateDocumentRootAction;
 use App\Actions\Web\UpdateVirtualHostPhpVersionAction;
 use InvalidArgumentException;
 
@@ -93,6 +94,7 @@ class ActionRegistry
         'php.list_extensions' => ListPhpExtensionsAction::class,
         'php.toggle_extension' => TogglePhpExtensionAction::class,
         'web.update_vhost_php_version' => UpdateVirtualHostPhpVersionAction::class,
+        'web.update_document_root' => UpdateDocumentRootAction::class,
         'web.sync_folder_protections' => SyncFolderProtectionsAction::class,
         'web.sync_redirects' => SyncRedirectsAction::class,
         'web.sync_hotlink_protection' => SyncHotlinkProtectionAction::class,

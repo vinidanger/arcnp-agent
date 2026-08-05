@@ -1836,3 +1836,20 @@ pela tela do Painel e confirme que o unit reinicia com o `ExecStart`
 apontando pro binário novo (`systemctl cat arcnp-php-{username}.service`).
 Suspenda/reative a conta e confirme que o site fica fora do ar
 (suspensa) e volta (reativada) sem tocar em nenhuma outra conta.
+
+## Diretório público customizado (public_path)
+
+Sem deploy especial — só código. Motivação: extrair um app tipo
+Laravel/Symfony na raiz de uma conta dá 403 (nginx não acha
+`index.php` em `public_html/`, ele fica em `public_html/public/`).
+`App\Support\DocumentRoot::resolve()` ganhou um 5º parâmetro opcional
+(`$publicPath`) que é anexado ao final do document root já calculado
+— `CreateVirtualHostAction`, `CreateAddonDomainAction`,
+`UpdateVirtualHostPhpVersionAction` e `IssueSslCertificateAction`
+agora aceitam `public_path` no payload e repassam pra lá. Ação nova
+`web.update_document_root` (`UpdateDocumentRootAction`) reescreve o
+vhost de um domínio já existente só pra mudar isso, sem recriar nada
+— espelha exatamente o `UpdateVirtualHostPhpVersionAction` (mesmo
+teste+reload de nginx no final). Validado com o mesmo `Subdirectory`
+já usado pro `subdir` de domínio adicional (um segmento só, sem `/`,
+sem `..`).

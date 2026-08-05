@@ -15,13 +15,14 @@ use App\Support\Subdirectory;
 use Illuminate\Support\Facades\File;
 
 /**
- * Reescreve um vhost já existente só pra apontar pro socket da nova
- * versão de PHP — roda uma vez por domínio da conta (principal +
- * adicionais/subdomínios), depois que o pool novo (SwitchPhpVersionAction)
- * já existe. Preserva o bloco SSL se o domínio já tiver certificado
- * ativo (senão perderia o HTTPS ao trocar de versão).
+ * Reescreve um vhost já existente só pra mudar o public_path (a
+ * subpasta que o nginx serve de fato — ex.: "public" pra um projeto
+ * Laravel/Symfony extraído com a árvore inteira do framework). Mesmo
+ * esqueleto do UpdateVirtualHostPhpVersionAction (mesma necessidade:
+ * recalcular document_root, preservar SSL, testar+recarregar nginx),
+ * só que o gatilho da mudança é outro.
  */
-class UpdateVirtualHostPhpVersionAction implements AgentAction
+class UpdateDocumentRootAction implements AgentAction
 {
     public function __construct(
         private ProcessRunner $processRunner,
@@ -70,6 +71,6 @@ class UpdateVirtualHostPhpVersionAction implements AgentAction
         $this->processRunner->testNginxConfig();
         $this->processRunner->reloadNginx();
 
-        return ['domain' => $domain, 'php_version' => $phpVersion];
+        return ['domain' => $domain, 'document_root' => $documentRoot];
     }
 }

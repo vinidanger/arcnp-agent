@@ -52,7 +52,8 @@ class CreateAddonDomainAction implements AgentAction
         $homeDir = config('provisioning.home_base_dir')."/{$username}";
         $subdir = $location === 'outside' ? null : Subdirectory::validate($payload['subdir'] ?? '');
         $target = $location === 'outside' ? $domain : $subdir;
-        $documentRoot = DocumentRoot::resolve($homeDir, $domain, $location, $subdir);
+        $publicPath = blank($payload['public_path'] ?? null) ? null : Subdirectory::validate($payload['public_path']);
+        $documentRoot = DocumentRoot::resolve($homeDir, $domain, $location, $subdir, $publicPath);
 
         $this->processRunner->createAddonDirectory($username, $location, $target);
 
