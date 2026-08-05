@@ -13,7 +13,6 @@ arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/create-hosting-user.sh 
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/delete-hosting-user.sh *
 arcnpagent ALL=(root) NOPASSWD: /usr/sbin/nginx -t
 arcnpagent ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx
-arcnpagent ALL=(root) NOPASSWD: /usr/bin/systemctl reload php-fpm-hosting
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/issue-ssl-certificate.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/renew-ssl-certificates.sh
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/create-addon-directory.sh *
@@ -33,9 +32,12 @@ arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-ftp.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-app.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/install-wordpress.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/toggle-php-extension.sh *
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/set-resource-limits.sh *
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/set-disk-quota.sh *
 
-# Uma linha por versão de PHP suportada (config/provisioning.php) — cada
-# uma isolada no próprio serviço, reload de uma nunca afeta as outras.
-arcnpagent ALL=(root) NOPASSWD: /usr/bin/systemctl reload php81-php-fpm
-arcnpagent ALL=(root) NOPASSWD: /usr/bin/systemctl reload php82-php-fpm
-arcnpagent ALL=(root) NOPASSWD: /usr/bin/systemctl reload php84-php-fpm
+# 1 processo PHP-FPM por CONTA (não mais 1 service por versão
+# compartilhado) — unit sempre "arcnp-php-{username}.service", nome
+# variável, por isso passa pelo wrapper (nunca um "systemctl reload"
+# pinado por linha, como era antes).
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-php-fpm-service.sh *
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/reload-php-fpm-for-binary.sh *

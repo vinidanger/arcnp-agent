@@ -65,14 +65,24 @@ cp deploy/nginx/arcnp-agent.conf /etc/nginx/conf.d/arcnp-agent.conf
 nginx -t && systemctl reload nginx
 ```
 
-## 6. PHP-FPM separado para contas de hospedagem
+## 6. PHP-FPM separado para contas de hospedagem — SUPERADO, ver seção 38
+
+**Desde a feature de limites de recursos (seção 38), contas de
+hospedagem NÃO usam mais esse serviço compartilhado** — cada conta
+ganha seu próprio processo PHP-FPM dedicado (`arcnp-php-{username}.service`),
+que é o que permite o cgroup da conta (`user-{uid}.slice`) realmente
+limitar CPU/RAM do PHP. Esta seção fica só como referência histórica
+de por que o Painel/Agent continuam com o PHP-FPM próprio deles
+separado das contas (isso não mudou) — para o PHP-FPM das CONTAS, siga
+a seção 38.
 
 Toda vez que uma conta é criada/removida, o Agent recarrega o PHP-FPM
 pra ativar o pool novo — e um reload derruba momentaneamente **todos**
 os pools daquele serviço. Se fosse o mesmo `php-fpm.service` do
 Painel/Agent, cada conta nova causaria uma interrupção breve no
 próprio Painel (rodando no mesmo host). Por isso as contas de
-hospedagem ficam num serviço `php-fpm-hosting` totalmente separado:
+hospedagem ficavam num serviço `php-fpm-hosting` totalmente separado
+(hoje substituído por 1 service por conta, seção 38):
 
 ```
 mkdir -p /etc/php-fpm-hosting.d /var/log/php-fpm
@@ -199,11 +209,18 @@ dedicado dentro de `public_html` e seu próprio vhost).
 
 ## 14. Múltiplas versões de PHP (8.1 / 8.2 / 8.4)
 
-O 8.3 já é a versão padrão do sistema (`php-fpm-hosting.service`,
-seção 6). As demais vêm do Remi como pacotes paralelos — cada uma
-isolada no próprio `systemd service`, exatamente pelo mesmo motivo do
-8.3 estar separado do Painel/Agent: reload de pool de uma versão nunca
-pode afetar contas de outra.
+**Desde a seção 38, contas NÃO usam mais o `php$v-php-fpm.service`
+compartilhado abaixo** — só os PACOTES (binário + extensões) desta
+seção continuam necessários, porque `config('provisioning.php_versions')`
+aponta pra eles (`/usr/bin/php81` etc.) no `ExecStart` do processo
+dedicado de cada conta. O trecho de habilitar
+`php$v-php-fpm`/placeholder pool fica só como referência histórica —
+pode pular direto pro `dnf install` e ir pra seção 38.
+
+O 8.3 já é a versão padrão do sistema. As demais vêm do Remi como
+pacotes paralelos — historicamente cada uma isolada no próprio
+`systemd service` compartilhado (mesmo motivo do 8.3/seção 6), hoje
+substituído por 1 processo por CONTA (seção 38).
 
 ```
 dnf install -y dnf-plugins-core
@@ -1548,10 +1565,10 @@ afeta todas as contas de uma vez e não é algo pra automatizar atrás de
 um botão sem o admin decidir conscientemente.
 
 **Importante — caminhos não verificados numa VPS real**: `ini_dir` e
-`binary` de cada versão em `config/provisioning.php` foram inferidos a
-partir do mesmo padrão já usado pro `pool_dir` (`/etc/opt/remi/php$v/`)
-— esse ambiente de desenvolvimento não tem Remi/RHEL pra confirmar de
-verdade. **Antes de confiar na feature**, rode em cada versão:
+`binary` de cada versão em `config/provisioning.php` foram inferidos
+pela convenção Remi (`/etc/opt/remi/php$v/`) — esse ambiente de
+desenvolvimento não tem Remi/RHEL pra confirmar de verdade. **Antes de
+confiar na feature**, rode em cada versão:
 
 ```
 php81 --ini
@@ -1582,5 +1599,202 @@ visudo -c
 PHP", troque a versão no seletor e confirme que a lista bate com
 `php$v -m`. Desative uma extensão de teste (ex. `redis`, se instalada)
 e confirme com `php$v -m` que ela some da lista — depois reative e
-confirme que volta. Confirme que o PHP-FPM daquela versão foi
-recarregado (`systemctl status php$v-php-fpm`, sem erro) a cada toggle.
+confirme que volta. **Desde a seção 38**, não existe mais 1 service
+por versão pra conferir — o toggle reinicia cada
+`arcnp-php-{username}.service` que usa aquele binário
+(`reload-php-fpm-for-binary.sh`); confirme com
+`systemctl list-units 'arcnp-php-*.service'` que os units das contas
+naquela versão reiniciaram (`systemctl status arcnp-php-{username}`
+mostrando um `Active: active` recente) sem erro.
+
+## 38. Limites de recursos por conta (CPU/RAM/processos/I-O) + cota de disco real
+
+Substituto caseiro do CloudLinux, via cgroups v2 nativo do systemd —
+sem módulo de kernel de terceiros. Duas peças bem separadas: (A) o
+cgroup em si (`user-{uid}.slice`) que limita CPU/RAM/processos/I-O, e
+(B) a cota de disco real (`setquota -u`, mecanismo de kernel
+totalmente diferente, nada a ver com cgroup). Ambas dependem da
+**Etapa 2** abaixo (PHP-FPM dedicado por conta) pra que o maior
+consumidor de recursos (o próprio PHP) realmente caia dentro do
+cgroup — sem isso só cron/SSH/apps Node-Python seriam limitados.
+
+### A. cgroup — CPU/RAM/processos/I-O (`user-{uid}.slice`)
+
+Não cria nenhum slice customizado — reaproveita o `user-{uid}.slice`
+que o próprio systemd já gerencia por UID (o mesmo que aparece quando
+um usuário faz login via SSH). `loginctl enable-linger` mantém esse
+slice vivo permanentemente, mesmo sem sessão ativa (contas de
+hospedagem não têm login interativo real). `systemctl set-property`
+aplica os limites e persiste sozinho (grava um drop-in em
+`/etc/systemd/system.control/`, nenhum arquivo pra gerenciar na mão).
+
+Sem pacote novo pra instalar — tudo isso é nativo do systemd (AlmaLinux 9
+já vem com cgroups v2 habilitado por padrão, `unified_cgroup_hierarchy`).
+Só o sudoers:
+
+```
+chmod +x scripts/set-resource-limits.sh
+git update-index --chmod=+x scripts/set-resource-limits.sh
+
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+**Cobertura por PAM — verificar no primeiro deploy**: SSH e apps
+Node/Python/PHP-FPM entram no slice de forma garantida (SSH via PAM
+nativo, os outros dois via `Slice=user-{uid}.slice` explícito no
+próprio unit). **Cron depende de `/etc/pam.d/crond` incluir
+`pam_systemd`** — é o padrão de fábrica do AlmaLinux 9, mas não foi
+verificado numa VPS real neste ambiente de dev. Confirme:
+
+```
+grep pam_systemd /etc/pam.d/crond
+```
+
+Se a linha não existir, tarefas cron da conta **não** vão cair no
+cgroup (continuam rodando, só não contam pro limite) — nesse caso,
+avalie adicionar a linha manualmente ou trocar o mecanismo de cron por
+algo que force a sessão (fora do escopo desta entrega).
+
+**Limitação conhecida, sem solução neste v1**: FTP (vsftpd) não passa
+por sessão PAM nem tem unit próprio por conta — transferências FTP
+**não** caem no cgroup, CPU/RAM/processos do FTP ficam fora desse
+controle. A cota de disco (item B abaixo) continua valendo pro FTP
+normalmente, porque é aplicada no filesystem por UID, não por cgroup.
+
+**Teste pós-deploy**: crie/edite um plano com CPU/RAM/processos/I-O
+definidos, abra "Recursos" na conta e clique "Reaplicar limites".
+Confirme com:
+
+```
+systemctl show user-$(id -u <username>).slice -p CPUQuota,MemoryMax,TasksMax,IOWeight
+```
+
+que os valores batem com o plano. Rode algo pesado como a conta (ex.
+`su - <username> -s /bin/bash -c "yes > /dev/null &"` — mate depois
+com `pkill -u <username> yes`) e confirme em `systemd-cgtop` que o
+consumo aparece sob `user-<uid>.slice` e é cortado no `CPUQuota`
+configurado.
+
+### B. Cota de disco real (`setquota -u`, não XFS project quota)
+
+Diferente do resto do painel: cada conta já tem 1 UID Linux dedicado,
+então cota por usuário mapeia 1:1 sem precisar de um ID de projeto à
+parte — funciona tanto em ext4 (`usrquota`) quanto XFS (`uquota`).
+
+**Pré-requisito obrigatório — o filesystem que hospeda `/home` precisa
+estar montado com quota de usuário habilitada.** Sem isso, `setquota`
+falha com uma mensagem clara (ex. `quotactl: Function not implemented`),
+que já sobe pro Painel como erro — mas a feature simplesmente não
+funciona até isso ser feito.
+
+**ext4:**
+
+```
+# /etc/fstab — adiciona "usrquota" nas opções de mount de /home
+# exemplo: UUID=xxxx /home ext4 defaults,usrquota 0 2
+
+mount -o remount /home
+quotacheck -cum /home
+quotaon /home
+quotaon -p /home   # confirma que está ativo
+```
+
+**XFS:**
+
+```
+# /etc/fstab — adiciona "uquota" nas opções de mount de /home
+# exemplo: UUID=xxxx /home xfs defaults,uquota 0 2
+
+mount -o remount /home
+# XFS ativa a contabilidade de quota sozinho no mount, sem quotacheck/quotaon
+quota -u -v root   # qualquer saída sem erro confirma que está ativo
+```
+
+Se `/home` for a raiz do sistema (`/`) em vez de um mount próprio, a
+mesma opção (`usrquota`/`uquota`) entra na linha de `/` do fstab —
+ajuste `AGENT_DISK_QUOTA_MOUNT` no `.env` do Agent (default `/home`,
+ver `config/provisioning.php` → `disk_quota_mount`) pra bater com o
+ponto de montagem real.
+
+Depois disso, só o sudoers (mesmo pacote de instalação da parte A):
+
+```
+chmod +x scripts/set-disk-quota.sh
+git update-index --chmod=+x scripts/set-disk-quota.sh
+
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+**Teste pós-deploy**: defina uma cota baixa (ex. 10 MB) num plano de
+teste, reaplique limites na conta, confirme com `repquota /home` (ou
+`quota -u <username>`) que o limite aparece, e tente gravar um arquivo
+maior que a cota (via FTP ou gerenciador de arquivos) confirmando que
+falha com "Disco cheio"/"Disk quota exceeded". Apague a cota (plano
+sem `disk_quota_mb`, reaplicar) e confirme que a gravação volta a
+funcionar.
+
+### Etapa 2 — PHP-FPM dedicado por conta (pré-requisito da parte A valer pro PHP)
+
+Cada conta passa a ter seu próprio processo mestre de PHP-FPM
+(`arcnp-php-{username}.service`), com `Slice=user-{uid}.slice` no
+próprio unit — os workers do FPM (filhos do processo mestre) herdam o
+cgroup automaticamente ao nascer, sem hook nenhum. Isso substitui o
+modelo antigo de 1 service COMPARTILHADO por versão de PHP (seções 6 e
+14, ambas marcadas como superadas).
+
+Sem pacote novo — só o diretório de config (agent-writable direto,
+mesmo padrão do `nginx_conf_dir`) e o sudoers:
+
+```
+mkdir -p /etc/arcnp-php /run/arcnp-php
+chgrp arcnpagent /etc/arcnp-php
+chmod 2775 /etc/arcnp-php
+
+chmod +x scripts/manage-php-fpm-service.sh scripts/reload-php-fpm-for-binary.sh
+git update-index --chmod=+x scripts/manage-php-fpm-service.sh
+git update-index --chmod=+x scripts/reload-php-fpm-for-binary.sh
+
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+`/run/arcnp-php` é tmpfs (não sobrevive a reboot) — se isso for um
+problema, considere um tmpfiles.d próprio
+(`/etc/tmpfiles.d/arcnp-php.conf` com `d /run/arcnp-php 0755 root root`)
+pra recriar automaticamente no boot, mesma ideia já usada pro
+`/run/php$v-fpm` na seção 14.
+
+**Migração de contas já existentes (rodar uma vez, com cuidado)**:
+
+```
+php artisan php-fpm:migrate-to-per-account
+```
+
+Isso cria o service novo pra cada conta ativa (caminho novo, não
+colide com os pools antigos) e re-renderiza os vhosts pra apontar pro
+socket novo. **Não apaga nada da arquitetura antiga automaticamente.**
+Depois de confirmar que tudo subiu:
+
+```
+systemctl list-units 'arcnp-php-*.service'
+# confira Active: active em todas, sem falha
+
+# só depois de confirmar, limpeza manual da arquitetura antiga:
+systemctl disable --now php-fpm-hosting php81-php-fpm php82-php-fpm php84-php-fpm
+```
+
+Contas novas (criadas depois do deploy desta feature) já nascem
+direto no modelo novo — a migração só é necessária pra quem tinha
+contas de antes.
+
+**Teste pós-deploy completo**: crie uma conta de teste, confirme
+`systemctl status arcnp-php-{username}.service` ativo com
+`systemctl show arcnp-php-{username}.service -p Slice` mostrando o
+slice certo. Acesse o site da conta (confirma que o PHP responde pelo
+socket novo, `/run/arcnp-php/{username}.sock`). Troque a versão de PHP
+pela tela do Painel e confirme que o unit reinicia com o `ExecStart`
+apontando pro binário novo (`systemctl cat arcnp-php-{username}.service`).
+Suspenda/reative a conta e confirme que o site fica fora do ar
+(suspensa) e volta (reativada) sem tocar em nenhuma outra conta.

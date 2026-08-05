@@ -10,12 +10,13 @@ use App\Support\PhpFpmPool;
 use App\Support\PhpFpmPoolSettings;
 use App\Support\PhpVersion;
 use Illuminate\Support\Facades\File;
-use RuntimeException;
 
 /**
- * Cria o pool na versão nova e só remove o da versão antiga depois
- * (não o contrário) — evita a conta ficar sem NENHUM pool ativo se
- * algo falhar no meio do caminho.
+ * Identidade do unit é a CONTA, não a versão (arcnp-php-{username}.service
+ * sempre) — diferente de antes (quando cada versão tinha um service
+ * próprio compartilhado), trocar de versão aqui é só reescrever o
+ * config + o unit (ExecStart aponta pro binário novo) e reaplicar via
+ * "apply" (idempotente: escreve, habilita, reinicia).
  */
 class SwitchPhpVersionAction implements AgentAction
 {
@@ -42,30 +43,18 @@ class SwitchPhpVersionAction implements AgentAction
             return ['username' => $username, 'switched' => false];
         }
 
-        $newPoolPath = PhpFpmPool::poolConfigPath($username, $newVersion);
-
-        if (File::exists($newPoolPath)) {
-            throw new RuntimeException("Pool já existe na versão de destino: {$newVersion}");
-        }
-
         // $payload carrega os pool settings atuais da conta (se ela já
         // tiver algum customizado) — sem isso, toda troca de versão
         // silenciosamente resetaria memory_limit/upload_max_filesize/etc
         // de volta pro padrão global.
-        $contents = $this->templateRenderer->render(
-            'php-fpm-pool',
-            PhpFpmPoolSettings::variables($username, $newVersion, $payload),
-        );
+        $variables = PhpFpmPoolSettings::variables($username, $newVersion, $payload);
 
-        File::put($newPoolPath, $contents);
-        $this->processRunner->reloadPhpFpm($newVersion);
+        File::put(PhpFpmPool::configPath($username), $this->templateRenderer->render('php-fpm-account', $variables));
 
-        $oldPoolPath = PhpFpmPool::poolConfigPath($username, $oldVersion);
+        $variables['uid'] = $this->processRunner->userId($username);
+        $serviceContent = $this->templateRenderer->render('php-fpm-account.service', $variables);
 
-        if (File::exists($oldPoolPath)) {
-            File::delete($oldPoolPath);
-            $this->processRunner->reloadPhpFpm($oldVersion);
-        }
+        $this->processRunner->applyPhpFpmService(PhpFpmPool::serviceName($username), $serviceContent);
 
         return ['username' => $username, 'switched' => true];
     }

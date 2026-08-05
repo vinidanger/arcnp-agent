@@ -8,13 +8,15 @@ use App\Support\DomainName;
 use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
 use App\Support\PhpFpmPool;
-use App\Support\PhpVersion;
 use Illuminate\Support\Facades\File;
 
 /**
- * Desativa vhost e pool sem apagar nada — só renomeia pra fora do
- * padrão que nginx/php-fpm carregam (*.conf), depois recarrega. É
- * reversível pela ReactivateHostingAccountAction.
+ * Desativa vhost (renomeia pra fora do padrão que o nginx carrega) e
+ * para o processo PHP-FPM dedicado da conta — sem apagar nada, é
+ * reversível pela ReactivateHostingAccountAction. Diferente de antes
+ * (quando o pool era renomeado dentro de um service compartilhado),
+ * agora a conta tem o próprio unit systemd, então "suspender o PHP" é
+ * só parar o unit dela — nenhum outro processo é afetado.
  */
 class SuspendHostingAccountAction implements AgentAction
 {
@@ -31,23 +33,16 @@ class SuspendHostingAccountAction implements AgentAction
     {
         $username = LinuxUsername::validate($payload['username'] ?? '');
         $domain = DomainName::validate($payload['domain'] ?? '');
-        $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
-        PhpVersion::config($phpVersion);
 
         $vhostPath = NginxVhost::configPath($domain);
-        $poolPath = PhpFpmPool::poolConfigPath($username, $phpVersion);
 
         if (File::exists($vhostPath)) {
             File::move($vhostPath, "{$vhostPath}.suspended");
         }
 
-        if (File::exists($poolPath)) {
-            File::move($poolPath, "{$poolPath}.suspended");
-        }
-
         $this->processRunner->testNginxConfig();
         $this->processRunner->reloadNginx();
-        $this->processRunner->reloadPhpFpm($phpVersion);
+        $this->processRunner->stopPhpFpmService(PhpFpmPool::serviceName($username));
 
         return ['username' => $username, 'domain' => $domain, 'suspended' => true];
     }

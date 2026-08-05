@@ -31,26 +31,26 @@ class CreatePhpFpmPoolAction implements AgentAction
         $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
         PhpVersion::config($phpVersion); // valida a versão
 
-        $configPath = PhpFpmPool::poolConfigPath($username, $phpVersion);
+        $configPath = PhpFpmPool::configPath($username);
 
         if (File::exists($configPath)) {
-            throw new RuntimeException("Pool PHP-FPM já existe para: {$username}");
+            throw new RuntimeException("Config de PHP-FPM já existe para: {$username}");
         }
 
-        $contents = $this->templateRenderer->render(
-            'php-fpm-pool',
-            PhpFpmPoolSettings::variables($username, $phpVersion, $payload),
-        );
+        $variables = PhpFpmPoolSettings::variables($username, $phpVersion, $payload);
 
-        File::put($configPath, $contents);
+        File::put($configPath, $this->templateRenderer->render('php-fpm-account', $variables));
+
+        $variables['uid'] = $this->processRunner->userId($username);
+        $serviceContent = $this->templateRenderer->render('php-fpm-account.service', $variables);
 
         try {
-            $this->processRunner->reloadPhpFpm($phpVersion);
+            $this->processRunner->applyPhpFpmService(PhpFpmPool::serviceName($username), $serviceContent);
         } catch (\Throwable $e) {
             File::delete($configPath);
             throw $e;
         }
 
-        return ['username' => $username, 'socket_path' => PhpFpmPool::socketPath($username, $phpVersion)];
+        return ['username' => $username, 'socket_path' => PhpFpmPool::socketPath($username)];
     }
 }

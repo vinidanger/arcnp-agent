@@ -11,6 +11,7 @@ use App\Actions\Database\DeleteMysqlDatabaseAction;
 use App\Actions\Demo\DemoAsyncAction;
 use App\Actions\Demo\HealthCheckAction;
 use App\Actions\Disk\DiskUsageAction;
+use App\Actions\Disk\SyncDiskQuotaAction;
 use App\Actions\Dns\CreateDnsZoneAction;
 use App\Actions\Ftp\SyncFtpAccountsAction;
 use App\Actions\Dns\DeleteDnsZoneAction;
@@ -39,6 +40,8 @@ use App\Actions\Php\ListPhpExtensionsAction;
 use App\Actions\Php\SwitchPhpVersionAction;
 use App\Actions\Php\TogglePhpExtensionAction;
 use App\Actions\Php\UpdatePhpFpmPoolSettingsAction;
+use App\Actions\Resources\GetResourceUsageAction;
+use App\Actions\Resources\SetResourceLimitsAction;
 use App\Actions\Server\CollectServerInfoAction;
 use App\Actions\Ssh\SetSshAccessAction;
 use App\Actions\Ssh\SetSshPasswordAction;
@@ -112,6 +115,7 @@ class ActionRegistry
         'files.compress' => CompressFilesAction::class,
         'files.extract' => ExtractArchiveAction::class,
         'disk.usage' => DiskUsageAction::class,
+        'disk.sync_quota' => SyncDiskQuotaAction::class,
         'cron.sync' => SyncCronJobsAction::class,
         'ssh.set_enabled' => SetSshAccessAction::class,
         'ssh.sync_keys' => SyncSshKeysAction::class,
@@ -125,6 +129,8 @@ class ActionRegistry
         'mail.tail_log' => TailMailLogAction::class,
         'ftp.sync_state' => SyncFtpAccountsAction::class,
         'server.collect_info' => CollectServerInfoAction::class,
+        'resources.set_limits' => SetResourceLimitsAction::class,
+        'resources.usage' => GetResourceUsageAction::class,
     ];
 
     public static function resolve(string $action): AgentAction

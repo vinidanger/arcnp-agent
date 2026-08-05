@@ -2,7 +2,6 @@
 
 namespace App\Services\System;
 
-use App\Support\PhpVersion;
 use Illuminate\Support\Facades\Process;
 use RuntimeException;
 
@@ -42,14 +41,56 @@ class ProcessRunner
     }
 
     /**
-     * Recarrega o php-fpm.service dessa versão específica — cada versão
-     * é isolada num serviço próprio (ver config/provisioning.php), então
-     * reload de um pool nunca afeta contas de outra versão nem o
-     * Painel/Agent.
+     * Escreve/atualiza o unit systemd dedicado da conta (conteúdo via
+     * STDIN) e garante que está rodando com o conteúdo novo — usado
+     * tanto pra criar quanto pra trocar de versão de PHP (troca o
+     * ExecStart, por isso sempre reinicia, não só recarrega).
      */
-    public function reloadPhpFpm(string $phpVersion): void
+    public function applyPhpFpmService(string $unit, string $unitContent): void
     {
-        $this->exec(['sudo', '-n', '/usr/bin/systemctl', 'reload', PhpVersion::config($phpVersion)['service']]);
+        $result = Process::timeout(30)->input($unitContent)->run([
+            'sudo', '-n', base_path('scripts/manage-php-fpm-service.sh'), $unit, 'apply',
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Falha ao aplicar serviço PHP-FPM: '.trim($result->errorOutput() ?: $result->output()));
+        }
+    }
+
+    /**
+     * Reload gracioso (SIGUSR2) — só pra troca de tunables do pool, sem
+     * mexer no unit nem trocar o binário (diferente de applyPhpFpmService).
+     */
+    public function reloadPhpFpmService(string $unit): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/manage-php-fpm-service.sh'), $unit, 'reload']);
+    }
+
+    public function removePhpFpmService(string $unit): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/manage-php-fpm-service.sh'), $unit, 'remove']);
+    }
+
+    public function stopPhpFpmService(string $unit): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/manage-php-fpm-service.sh'), $unit, 'stop']);
+    }
+
+    public function startPhpFpmService(string $unit): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/manage-php-fpm-service.sh'), $unit, 'start']);
+    }
+
+    /**
+     * Consequência de cada conta ter seu próprio processo mestre de
+     * PHP-FPM: alternar uma extensão a nível de SERVIDOR
+     * (TogglePhpExtensionAction) não tem mais 1 service só pra
+     * recarregar — precisa reiniciar todo unit de conta que usa aquele
+     * binário/versão. Ver reload-php-fpm-for-binary.sh.
+     */
+    public function reloadPhpFpmServicesForBinary(string $binary): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/reload-php-fpm-for-binary.sh'), $binary]);
     }
 
     /**
@@ -602,6 +643,57 @@ class ProcessRunner
         $lines = array_pad(explode("\n", trim($result->output())), count($units), 'unknown');
 
         return array_combine($units, array_map(fn ($line) => trim($line) ?: 'unknown', array_slice($lines, 0, count($units))));
+    }
+
+    /**
+     * CPU/RAM/processos/I-O da conta, via cgroup nativo do systemd
+     * (user-{uid}.slice — ver set-resource-limits.sh). Sem sudo:
+     * "systemctl set-property" (escrita) exige privilégio, mas
+     * "systemctl show" (leitura de contabilidade) não, mesmo raciocínio
+     * de appUnitStatus()/serviceStatuses().
+     */
+    public function setResourceLimits(string $username, string $cpuPercent, string $memoryMb, string $tasksMax, string $ioWeight): void
+    {
+        $this->exec([
+            'sudo', '-n', base_path('scripts/set-resource-limits.sh'), $username, $cpuPercent, $memoryMb, $tasksMax, $ioWeight,
+        ]);
+    }
+
+    /**
+     * @return array{cpu_usage_ns: ?int, memory_current_bytes: ?int, tasks_current: ?int}
+     */
+    public function resourceUsage(string $username): array
+    {
+        $uid = $this->userId($username);
+
+        $result = Process::timeout(10)->run([
+            'systemctl', 'show', "user-{$uid}.slice",
+            '-p', 'CPUUsageNSec,MemoryCurrent,TasksCurrent', '--value',
+        ]);
+
+        $lines = explode("\n", trim($result->output()));
+        $lines = array_pad($lines, 3, '');
+
+        $toInt = fn (string $value): ?int => ctype_digit($value) ? (int) $value : null;
+
+        return [
+            'cpu_usage_ns' => $toInt(trim($lines[0])),
+            'memory_current_bytes' => $toInt(trim($lines[1])),
+            'tasks_current' => $toInt(trim($lines[2])),
+        ];
+    }
+
+    /**
+     * Cota de disco real (user quota, não XFS project quota — ver
+     * set-disk-quota.sh). quotaMb=0 remove a cota (setquota trata 0
+     * como "sem limite").
+     */
+    public function setDiskQuota(string $username, int $quotaMb): void
+    {
+        $this->exec([
+            'sudo', '-n', base_path('scripts/set-disk-quota.sh'),
+            $username, (string) $quotaMb, config('provisioning.disk_quota_mount'),
+        ]);
     }
 
     /**

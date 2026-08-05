@@ -8,7 +8,6 @@ use App\Support\DomainName;
 use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
 use App\Support\PhpFpmPool;
-use App\Support\PhpVersion;
 use Illuminate\Support\Facades\File;
 
 class ReactivateHostingAccountAction implements AgentAction
@@ -26,23 +25,16 @@ class ReactivateHostingAccountAction implements AgentAction
     {
         $username = LinuxUsername::validate($payload['username'] ?? '');
         $domain = DomainName::validate($payload['domain'] ?? '');
-        $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
-        PhpVersion::config($phpVersion);
 
         $vhostPath = NginxVhost::configPath($domain);
-        $poolPath = PhpFpmPool::poolConfigPath($username, $phpVersion);
 
         if (File::exists("{$vhostPath}.suspended")) {
             File::move("{$vhostPath}.suspended", $vhostPath);
         }
 
-        if (File::exists("{$poolPath}.suspended")) {
-            File::move("{$poolPath}.suspended", $poolPath);
-        }
-
         $this->processRunner->testNginxConfig();
         $this->processRunner->reloadNginx();
-        $this->processRunner->reloadPhpFpm($phpVersion);
+        $this->processRunner->startPhpFpmService(PhpFpmPool::serviceName($username));
 
         return ['username' => $username, 'domain' => $domain, 'suspended' => false];
     }

@@ -7,7 +7,7 @@ use InvalidArgumentException;
 class PhpVersion
 {
     /**
-     * @return array{pool_dir: string, socket_dir: string, service: string}
+     * @return array{ini_dir: string, binary: string}
      */
     public static function config(string $version): array
     {

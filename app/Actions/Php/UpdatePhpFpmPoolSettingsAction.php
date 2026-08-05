@@ -13,9 +13,11 @@ use Illuminate\Support\Facades\File;
 use RuntimeException;
 
 /**
- * Reescreve o pool JÁ EXISTENTE da conta (mesma versão de PHP, só os
+ * Reescreve o config JÁ EXISTENTE da conta (mesma versão de PHP, só os
  * valores tunáveis mudam) — diferente de CreatePhpFpmPoolAction/
- * SwitchPhpVersionAction, que lidam com pool novo/em versão diferente.
+ * SwitchPhpVersionAction, que lidam com config novo/em versão
+ * diferente. "reload" é gracioso (SIGUSR2, só recarrega o que o pool
+ * lê), não precisa reescrever o unit nem reiniciar o processo mestre.
  */
 class UpdatePhpFpmPoolSettingsAction implements AgentAction
 {
@@ -36,19 +38,19 @@ class UpdatePhpFpmPoolSettingsAction implements AgentAction
         $phpVersion = $payload['php_version'] ?? '';
         PhpVersion::config($phpVersion);
 
-        $configPath = PhpFpmPool::poolConfigPath($username, $phpVersion);
+        $configPath = PhpFpmPool::configPath($username);
 
         if (! File::exists($configPath)) {
-            throw new RuntimeException("Pool PHP-FPM não encontrado para: {$username}");
+            throw new RuntimeException("Config de PHP-FPM não encontrado para: {$username}");
         }
 
         $contents = $this->templateRenderer->render(
-            'php-fpm-pool',
+            'php-fpm-account',
             PhpFpmPoolSettings::variables($username, $phpVersion, $payload),
         );
 
         File::put($configPath, $contents);
-        $this->processRunner->reloadPhpFpm($phpVersion);
+        $this->processRunner->reloadPhpFpmService(PhpFpmPool::serviceName($username));
 
         return ['username' => $username];
     }

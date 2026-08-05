@@ -56,7 +56,10 @@ class TogglePhpExtensionAction implements AgentAction
         }
 
         $this->processRunner->togglePhpExtension($config['ini_dir'], $filename, $enable);
-        $this->processRunner->reloadPhpFpm($phpVersion);
+        // Sem 1 service compartilhado por versão pra recarregar (cada
+        // conta tem o próprio processo PHP-FPM agora) — precisa
+        // reiniciar todo unit de conta que usa esse binário.
+        $this->processRunner->reloadPhpFpmServicesForBinary($config['binary']);
 
         return ['filename' => $filename, 'enabled' => $enable, 'changed' => true];
     }

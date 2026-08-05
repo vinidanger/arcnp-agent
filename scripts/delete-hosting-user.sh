@@ -14,6 +14,14 @@ if ! id -u "$USERNAME" >/dev/null 2>&1; then
     exit 0
 fi
 
+
+# Defesa extra além do clear explícito de limites que o Painel já
+# dispara antes desse script (resources.set_limits com infinity) —
+# se por algum motivo esse passo não rodou, isso evita que o slice
+# fique "lingering" indefinidamente pra uma UID que está prestes a
+# ser reciclada por um useradd futuro.
+loginctl disable-linger "$USERNAME" 2>/dev/null || true
+
 userdel -r "$USERNAME"
 rm -f "/etc/cron.d/arcnp-$USERNAME"
 

@@ -3,11 +3,14 @@
 namespace App\Support;
 
 /**
- * Monta as variáveis do stub php-fpm-pool.stub — reaproveitado por
- * CreatePhpFpmPoolAction, SwitchPhpVersionAction e
- * UpdatePhpFpmPoolSettingsAction pra não triplicar o merge de
- * defaults/overrides nos três. $overrides ausente/vazio = usa
- * config('provisioning.default_pool_settings') integralmente.
+ * Monta as variáveis do stub php-fpm-account.stub (config global+pool
+ * combinada) — reaproveitado por CreatePhpFpmPoolAction,
+ * SwitchPhpVersionAction e UpdatePhpFpmPoolSettingsAction pra não
+ * triplicar o merge de defaults/overrides nos três. $overrides
+ * ausente/vazio = usa config('provisioning.default_pool_settings')
+ * integralmente. "binary"/"config_path" aqui servem pro
+ * php-fpm-account.service.stub (unit systemd), não pro próprio
+ * arquivo de config do FPM.
  */
 class PhpFpmPoolSettings
 {
@@ -99,7 +102,9 @@ class PhpFpmPoolSettings
         $variables = [
             'username' => $username,
             'socket_path' => PhpFpmPool::socketPath($username, $phpVersion),
+            'config_path' => PhpFpmPool::configPath($username),
             'home_dir' => config('provisioning.home_base_dir')."/{$username}",
+            'binary' => PhpVersion::config($phpVersion)['binary'],
         ];
 
         foreach (self::TUNABLE_KEYS as $key) {

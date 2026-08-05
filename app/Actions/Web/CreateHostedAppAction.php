@@ -80,6 +80,10 @@ class CreateHostedAppAction implements AgentAction
             'exec_start' => "{$binary} {$entryPath}",
             'port' => $port,
             'username' => $username,
+            // Mesmo cgroup do PHP-FPM/cron/SSH da conta (user-{uid}.slice,
+            // ver resources.set_limits) — sem isso o app Node/Python
+            // ficaria de fora dos limites de CPU/RAM/processos do plano.
+            'uid' => $this->processRunner->userId($username),
         ]);
 
         $this->processRunner->createAppUnit($unit, $unitContent);

@@ -1,0 +1,12 @@
+[Unit]
+Description=Arcn Panel PHP-FPM - {{username}}
+After=network.target
+
+[Service]
+ExecStart={{binary}} --fpm-config {{config_path}} --nodaemonize
+Restart=on-failure
+RestartSec=5
+Slice=user-{{uid}}.slice
+
+[Install]
+WantedBy=multi-user.target
