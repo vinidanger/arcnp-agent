@@ -1720,6 +1720,29 @@ ajuste `AGENT_DISK_QUOTA_MOUNT` no `.env` do Agent (default `/home`,
 ver `config/provisioning.php` → `disk_quota_mount`) pra bater com o
 ponto de montagem real.
 
+**Pegadinha confirmada em produção — quota na RAIZ precisa de
+`rootflags`, fstab sozinho não basta.** A raiz é montada bem cedo no
+boot (antes do `/etc/fstab` poder ser lido — ele mora dentro da
+própria raiz) e só passa por um *remount* depois; XFS **não permite
+habilitar quota via remount**, só na montagem inicial. Editar o fstab
+e reiniciar não é suficiente nesse caso — `findmnt /` continua
+mostrando `noquota` mesmo depois do reboot. A opção precisa vir do
+GRUB. Em sistema com Boot Loader Spec (`GRUB_ENABLE_BLSCFG=true`,
+padrão no AlmaLinux/RHEL 9), a forma correta é via `grubby` (não editar
+`grub.cfg` na mão):
+
+```
+grubby --update-kernel=ALL --args="rootflags=uquota"
+grubby --info=ALL | grep args   # confirma que entrou em todos os kernels
+reboot
+```
+
+Depois do reboot, `cat /proc/cmdline` deve mostrar `rootflags=uquota`
+e `findmnt /` deve mostrar `usrquota` nas opções (XFS exibe assim,
+mesmo tendo passado `uquota`). Se a quota for aplicada num mount
+SEPARADO de verdade (não a raiz), o `mount -o remount` acima já basta,
+sem precisar mexer no GRUB.
+
 Depois disso, só o sudoers (mesmo pacote de instalação da parte A):
 
 ```
@@ -1763,11 +1786,23 @@ install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-
 visudo -c
 ```
 
-`/run/arcnp-php` é tmpfs (não sobrevive a reboot) — se isso for um
-problema, considere um tmpfiles.d próprio
-(`/etc/tmpfiles.d/arcnp-php.conf` com `d /run/arcnp-php 0755 root root`)
-pra recriar automaticamente no boot, mesma ideia já usada pro
-`/run/php$v-fpm` na seção 14.
+**Obrigatório — `/run/arcnp-php` é tmpfs, some no reboot** (confirmado
+em produção: sem isso, todo `arcnp-php-*.service` crasha em loop
+`status=78` logo depois de reiniciar a VPS, porque o PID/socket não
+tem onde ser escrito). Cria a regra pro systemd recriar sozinho em
+todo boot, ANTES dos services subirem:
+
+```
+cat > /etc/tmpfiles.d/arcnp-php.conf <<'EOF'
+d /run/arcnp-php 0755 root root -
+EOF
+
+systemd-tmpfiles --create /etc/tmpfiles.d/arcnp-php.conf
+```
+
+(Mesma ideia já usada pro `/run/php$v-fpm` na seção 14 — mas lá é só
+sugestão, aqui é obrigatório porque a criação da conta já depende de
+`/run/arcnp-php` existir desde o primeiro boot.)
 
 **Migração de contas já existentes (rodar uma vez, com cuidado)**:
 
