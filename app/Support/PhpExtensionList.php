@@ -19,7 +19,15 @@ class PhpExtensionList
      * valer pro processo mestre inteiro, nunca por pool/conta, ver
      * detectType()).
      *
-     * @return list<array{filename: string, name: string, enabled: bool, type: string}>
+     * "zend_directive": só preenchido pra type==='zend' — é o valor
+     * REAL da linha "zend_extension=..." do arquivo (ex.
+     * "ioncube_loader_lin_8.3.so"), não o "name" amigável (que pode não
+     * bater com o nome do .so de verdade — caso do ioncube, cujo
+     * arquivo tem sufixo de versão). Usado por
+     * PhpFpmPoolSettings::buildZendIniLines() pra montar a diretiva
+     * certa no ini por conta, em vez de assumir "{name}.so".
+     *
+     * @return list<array{filename: string, name: string, enabled: bool, type: string, zend_directive: ?string}>
      */
     public static function forVersion(string $phpVersion): array
     {
@@ -29,27 +37,30 @@ class PhpExtensionList
 
         foreach (glob("{$iniDir}/*.ini") ?: [] as $path) {
             $filename = basename($path);
-            $extensions[] = [
-                'filename' => $filename,
-                'name' => self::friendlyName($filename),
-                'enabled' => true,
-                'type' => self::detectType($path),
-            ];
+            $extensions[] = self::describe($filename, $path, true);
         }
 
         foreach (glob("{$iniDir}/*.ini.disabled") ?: [] as $path) {
             $filename = basename($path, '.disabled');
-            $extensions[] = [
-                'filename' => $filename,
-                'name' => self::friendlyName($filename),
-                'enabled' => false,
-                'type' => self::detectType($path),
-            ];
+            $extensions[] = self::describe($filename, $path, false);
         }
 
         usort($extensions, fn ($a, $b) => $a['name'] <=> $b['name']);
 
         return $extensions;
+    }
+
+    private static function describe(string $filename, string $path, bool $enabled): array
+    {
+        $type = self::detectType($path);
+
+        return [
+            'filename' => $filename,
+            'name' => self::friendlyName($filename),
+            'enabled' => $enabled,
+            'type' => $type,
+            'zend_directive' => $type === 'zend' ? self::zendDirectiveValue($path) : null,
+        ];
     }
 
     /**
@@ -72,13 +83,13 @@ class PhpExtensionList
 
     /**
      * Mesma regra de availableForPerAccountOptIn(), só que pro lado
-     * "zend" — usado pelo toggle de zend_extension por conta (via flag
-     * -d no ExecStart do unit dedicado da conta, ver
-     * PhpFpmPoolSettings::renderZendExtensionFlags()), não confundir
-     * com availableForPerAccountOptIn() (que é só "extension" normal,
-     * via php_admin_value[extension]).
+     * "zend" — usado pelo toggle de zend_extension por conta (via um
+     * php.ini próprio da conta, scaneado antes do diretório padrão, ver
+     * PhpFpmPoolSettings::buildZendIniLines()), não confundir com
+     * availableForPerAccountOptIn() (que é só "extension" normal, via
+     * php_admin_value[extension]).
      *
-     * @return list<array{filename: string, name: string}>
+     * @return list<array{filename: string, name: string, zend_directive: ?string}>
      */
     public static function availableZendExtensionsForPerAccountOptIn(string $phpVersion): array
     {
@@ -100,5 +111,24 @@ class PhpExtensionList
         $contents = @file_get_contents($path) ?: '';
 
         return str_contains($contents, 'zend_extension') ? 'zend' : 'extension';
+    }
+
+    /**
+     * Valor literal depois do "=" da linha "zend_extension" — não dá
+     * pra assumir "{name}.so" (caso do ioncube, cujo arquivo real tem
+     * sufixo de versão, ex. "ioncube_loader_lin_8.3.so", diferente do
+     * "name" amigável "ioncube"). null se o arquivo não tiver a
+     * diretiva (não deveria acontecer pra um arquivo já classificado
+     * como "zend" por detectType(), mas evita warning se acontecer).
+     */
+    private static function zendDirectiveValue(string $path): ?string
+    {
+        $contents = @file_get_contents($path) ?: '';
+
+        if (preg_match('/^\s*zend_extension\s*=\s*(.+?)\s*$/mi', $contents, $matches) === 1) {
+            return trim($matches[1], "\"' \t");
+        }
+
+        return null;
     }
 }

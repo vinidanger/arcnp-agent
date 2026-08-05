@@ -94,10 +94,11 @@ class PhpFpmPoolSettings
     }
 
     /**
-     * "zend_extensions" é ativado via flag -d no ExecStart do unit
-     * dedicado da conta (ver renderZendExtensionFlags()), não via
-     * php_admin_value — zend_extension só pode ser setado no boot do
-     * processo, nunca por pool. Revalida contra
+     * "zend_extensions" é ativado via um php.ini próprio da conta,
+     * scaneado antes do diretório padrão da versão (ver
+     * buildZendIniLines() e App\Support\PhpFpmPool::applyZendIni()),
+     * não via php_admin_value — zend_extension só pode ser setado no
+     * boot do processo, nunca por pool. Revalida contra
      * PhpExtensionList::availableZendExtensionsForPerAccountOptIn(),
      * mesmo raciocínio de sanitizeExtraExtensions().
      */
@@ -111,17 +112,37 @@ class PhpFpmPoolSettings
     }
 
     /**
-     * Gera as flags "-d zend_extension=nome.so" pro placeholder
-     * {{zend_extension_flags}} do ExecStart — cada flag já vem com um
-     * espaço na frente, pra colar direto depois de "--nodaemonize" sem
-     * sobrar espaço nem faltar quando a lista está vazia.
+     * Monta o conteúdo do ini próprio da conta — uma linha
+     * "zend_extension={valor real}" por extensão selecionada. Usa o
+     * "zend_directive" de PhpExtensionList (o nome real do .so lido do
+     * arquivo original), não "{name}.so" — o ioncube, por exemplo, tem
+     * sufixo de versão no arquivo (ioncube_loader_lin_8.3.so), que não
+     * bate com o "name" amigável ("ioncube"). String vazia se nenhuma
+     * extensão selecionada (nesse caso App\Support\PhpFpmPool::applyZendIni()
+     * remove o diretório da conta em vez de escrever um ini vazio).
+     *
+     * Descartei a abordagem anterior (flag "-d zend_extension=..." no
+     * ExecStart) depois de confirmar em produção que o ioncube_loader
+     * recusa carregar assim — ele exige aparecer como a PRIMEIRA
+     * entrada dentro de um php.ini de verdade, e diretivas via -d são
+     * processadas tarde demais pro check interno dele. Um diretório de
+     * scan próprio da conta, listado ANTES do diretório padrão da
+     * versão em PHP_INI_SCAN_DIR, resolve isso sem perder nem duplicar
+     * nenhuma configuração do php.ini principal nem do scan padrão.
      */
-    private static function renderZendExtensionFlags(string $value): string
+    private static function buildZendIniLines(string $phpVersion, string $value): string
     {
         $names = array_filter(array_map('trim', explode(',', $value)));
-        $flags = array_map(fn (string $name) => " -d zend_extension={$name}.so", $names);
 
-        return implode('', $flags);
+        if (empty($names)) {
+            return '';
+        }
+
+        $directives = array_column(PhpExtensionList::availableZendExtensionsForPerAccountOptIn($phpVersion), 'zend_directive', 'name');
+
+        $lines = array_filter(array_map(fn (string $name) => isset($directives[$name]) ? "zend_extension={$directives[$name]}" : null, $names));
+
+        return implode("\n", $lines);
     }
 
     /**
@@ -147,7 +168,13 @@ class PhpFpmPoolSettings
         $variables['extra_extensions'] = self::sanitizeExtraExtensions($phpVersion, (string) $variables['extra_extensions']);
         $variables['extra_extensions_lines'] = self::renderExtraExtensionsLines($variables['extra_extensions']);
         $variables['zend_extensions'] = self::sanitizeZendExtensions($phpVersion, (string) $variables['zend_extensions']);
-        $variables['zend_extension_flags'] = self::renderZendExtensionFlags($variables['zend_extensions']);
+        // "zend_ini_lines" é só o CONTEÚDO a escrever (ou não) no ini
+        // próprio da conta — quem decide o Environment=PHP_INI_SCAN_DIR
+        // do unit é a Action que chama variables(), depois de gravar
+        // (ou remover) o arquivo via PhpFpmPool::applyZendIni(). Fica
+        // fora do stub .service diretamente, diferente do resto das
+        // TUNABLE_KEYS (que vão direto pro placeholder).
+        $variables['zend_ini_lines'] = self::buildZendIniLines($phpVersion, $variables['zend_extensions']);
 
         return $variables;
     }

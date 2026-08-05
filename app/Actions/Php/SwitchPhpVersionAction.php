@@ -52,6 +52,10 @@ class SwitchPhpVersionAction implements AgentAction
         File::put(PhpFpmPool::configPath($username), $this->templateRenderer->render('php-fpm-account', $variables));
 
         $variables['uid'] = $this->processRunner->userId($username);
+        $zendDir = PhpFpmPool::applyZendIni($username, $variables['zend_ini_lines']);
+        $variables['zend_ini_scan_dir_line'] = $zendDir === ''
+            ? ''
+            : 'Environment=PHP_INI_SCAN_DIR='.$zendDir.':'.PhpVersion::config($newVersion)['ini_dir'];
         $serviceContent = $this->templateRenderer->render('php-fpm-account.service', $variables);
 
         $this->processRunner->applyPhpFpmService(PhpFpmPool::serviceName($username), $serviceContent);

@@ -15,9 +15,10 @@ use Illuminate\Support\Facades\File;
  * Muda quais zend_extension essa conta carrega (ex.: ioncube_loader) —
  * diferente de UpdatePhpFpmPoolSettingsAction (que só reescreve o .conf
  * e dá reload gracioso), aqui precisa reescrever TAMBÉM o .service
- * (a flag -d fica no ExecStart) e reiniciar o processo — zend_extension
- * só é lido no boot, não tem como aplicar sem restart. Corpo quase
- * idêntico ao SwitchPhpVersionAction, mesmo motivo.
+ * (Environment=PHP_INI_SCAN_DIR aponta pro php.ini próprio da conta,
+ * ver PhpFpmPool::applyZendIni()) e reiniciar o processo —
+ * zend_extension só é lido no boot, não tem como aplicar sem restart.
+ * Corpo quase idêntico ao SwitchPhpVersionAction, mesmo motivo.
  */
 class UpdateZendExtensionsAction implements AgentAction
 {
@@ -48,6 +49,10 @@ class UpdateZendExtensionsAction implements AgentAction
         File::put(PhpFpmPool::configPath($username), $this->templateRenderer->render('php-fpm-account', $variables));
 
         $variables['uid'] = $this->processRunner->userId($username);
+        $zendDir = PhpFpmPool::applyZendIni($username, $variables['zend_ini_lines']);
+        $variables['zend_ini_scan_dir_line'] = $zendDir === ''
+            ? ''
+            : 'Environment=PHP_INI_SCAN_DIR='.$zendDir.':'.PhpVersion::config($phpVersion)['ini_dir'];
         $serviceContent = $this->templateRenderer->render('php-fpm-account.service', $variables);
 
         $this->processRunner->applyPhpFpmService(PhpFpmPool::serviceName($username), $serviceContent);

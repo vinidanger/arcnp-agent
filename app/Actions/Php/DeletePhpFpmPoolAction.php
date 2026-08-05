@@ -31,6 +31,8 @@ class DeletePhpFpmPoolAction implements AgentAction
             File::delete($configPath);
         }
 
+        PhpFpmPool::applyZendIni($username, '');
+
         return ['username' => $username, 'deleted' => true];
     }
 }

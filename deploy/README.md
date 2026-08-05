@@ -1853,3 +1853,74 @@ vhost de um domínio já existente só pra mudar isso, sem recriar nada
 teste+reload de nginx no final). Validado com o mesmo `Subdirectory`
 já usado pro `subdir` de domínio adicional (um segmento só, sem `/`,
 sem `..`).
+
+## 39. Extensões Zend por conta (ioncube_loader, etc.)
+
+Cada conta pode ativar `zend_extension`s (ex. `ioncube_loader`,
+`opcache`, `xdebug`) só pra si mesma, sem afetar as demais — possível
+porque cada conta já roda seu próprio processo mestre de PHP-FPM
+dedicado (ver seção 38). Igual às "Extensões extras" normais
+(`extension`, via `php_admin_value`), só oferece pra ativação por
+conta o que **já existe fisicamente no servidor** (um arquivo `.ini`
+ou `.ini.disabled` no `ini_dir` da versão) e está **desativado a nível
+de servidor** — instalar o `.so` pela primeira vez continua sendo
+manual, por SSH (mesmo raciocínio da seção 37: não é algo pra
+automatizar atrás de um botão).
+
+**Mecanismo (importante, mudou depois de testar em produção)**: a
+primeira versão desta feature usava uma flag `-d zend_extension=...`
+no `ExecStart` do unit da conta. Isso **não funciona pro ioncube** —
+ele recusa carregar assim, com o erro `[ionCube Loader] The Loader
+must appear as the first entry in the php.ini file`. O ionCube exige
+ser lido de um `php.ini` de verdade, como a primeira diretiva — uma
+flag `-d` na linha de comando é processada tarde demais pro check
+interno dele.
+
+Solução: cada conta com pelo menos 1 zend_extension ativada ganha um
+diretório próprio (`{php_fpm_config_dir}/{username}-zend.d/`, escrito
+sem sudo pelo Agent — mesmo diretório pai que já guarda os `.conf` de
+pool) com um arquivo `00-zend.ini` contendo uma linha
+`zend_extension={nome real do .so}` por extensão selecionada — o nome
+real vem lido do arquivo `.ini`/`.ini.disabled` original (campo
+`zend_directive` de `PhpExtensionList::forVersion()`), não é
+reconstruído como `{nome amigável}.so` (o ioncube tem sufixo de versão
+no arquivo, ex. `ioncube_loader_lin_8.3.so` ≠ nome amigável
+`ioncube`). O `ExecStart` do unit ganha
+`Environment=PHP_INI_SCAN_DIR={diretório da conta}:{ini_dir padrão da
+versão}` — isso faz o PHP escanear o diretório da conta **primeiro**
+(satisfazendo o ionCube) e DEPOIS continuar escaneando o diretório
+padrão normalmente (redis, opcache, etc. da conta continuam
+carregando do jeito de sempre). O `php.ini` PRINCIPAL nunca é tocado
+— só a lista de diretórios adicionais escaneados muda, e só pra essa
+conta.
+
+Contas sem nenhuma zend_extension ativada não ganham a linha
+`Environment=` (unit idêntico ao de antes desta feature).
+
+Sem passo de deploy adicional além do de sempre — o diretório
+`{username}-zend.d` é criado sob demanda pelo Agent.
+
+**Instalar o ioncube pela primeira vez numa versão de PHP** (exemplo
+pro PHP 8.3 nativo, `extension_dir=/usr/lib64/php/modules`,
+`ini_dir=/etc/php.d`):
+
+```
+cd /tmp
+curl -O https://downloads.ioncube.com/loader_downloads/ioncube_loaders_lin_x86-64.tar.gz
+tar -xzf ioncube_loaders_lin_x86-64.tar.gz
+cp ioncube/ioncube_loader_lin_8.3.so /usr/lib64/php/modules/
+echo 'zend_extension=ioncube_loader_lin_8.3.so' > /etc/php.d/00-ioncube.ini.disabled
+```
+
+Repita pras outras versões trocando o binário/`ini_dir` conforme
+`config/provisioning.php` (ex. 8.1/8.2/8.4 usam os caminhos Remi
+`/opt/remi/php8x/root/usr/bin/php`/`/etc/opt/remi/php8x/php.d`). Depois
+disso, "ioncube" aparece em "Disponíveis por conta" na tela de PHP de
+qualquer conta naquela versão.
+
+**Teste pós-deploy**: ative o ioncube só numa conta de teste, confirme
+`systemctl show arcnp-php-{username}.service -p Environment` mostrando
+o `PHP_INI_SCAN_DIR` certo, e rode um `phpinfo()` (ou peça pro
+`php-fpm` da conta via socket) confirmando (a) ionCube aparece
+carregado sem erro, (b) as extensões normais da conta continuam
+aparecendo também, (c) uma SEGUNDA conta sem o toggle não tem ionCube.
