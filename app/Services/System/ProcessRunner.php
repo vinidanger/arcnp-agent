@@ -52,6 +52,20 @@ class ProcessRunner
         $this->exec(['sudo', '-n', '/usr/bin/systemctl', 'reload', PhpVersion::config($phpVersion)['service']]);
     }
 
+    /**
+     * Alterna um .ini de extensão já existente entre habilitado/
+     * desabilitado (renomeia pra/de ".ini.disabled") — nunca cria
+     * arquivo novo. Reload do PHP-FPM da versão fica por conta de quem
+     * chama (TogglePhpExtensionAction), pra não recarregar sem
+     * necessidade quando o estado já é o desejado.
+     */
+    public function togglePhpExtension(string $iniDir, string $filename, bool $enable): void
+    {
+        $this->exec([
+            'sudo', '-n', base_path('scripts/toggle-php-extension.sh'), $iniDir, $filename, $enable ? 'enable' : 'disable',
+        ]);
+    }
+
     public function userExists(string $username): bool
     {
         return Process::run(['id', '-u', $username])->successful();

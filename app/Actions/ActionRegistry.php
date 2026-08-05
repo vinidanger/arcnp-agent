@@ -35,7 +35,9 @@ use App\Actions\Mail\SyncMailStateAction;
 use App\Actions\Mail\TailMailLogAction;
 use App\Actions\Php\CreatePhpFpmPoolAction;
 use App\Actions\Php\DeletePhpFpmPoolAction;
+use App\Actions\Php\ListPhpExtensionsAction;
 use App\Actions\Php\SwitchPhpVersionAction;
+use App\Actions\Php\TogglePhpExtensionAction;
 use App\Actions\Php\UpdatePhpFpmPoolSettingsAction;
 use App\Actions\Server\CollectServerInfoAction;
 use App\Actions\Ssh\SetSshAccessAction;
@@ -85,6 +87,8 @@ class ActionRegistry
         'web.delete_addon_domain' => DeleteAddonDomainAction::class,
         'php.switch_version' => SwitchPhpVersionAction::class,
         'php.update_pool_settings' => UpdatePhpFpmPoolSettingsAction::class,
+        'php.list_extensions' => ListPhpExtensionsAction::class,
+        'php.toggle_extension' => TogglePhpExtensionAction::class,
         'web.update_vhost_php_version' => UpdateVirtualHostPhpVersionAction::class,
         'web.sync_folder_protections' => SyncFolderProtectionsAction::class,
         'web.sync_redirects' => SyncRedirectsAction::class,

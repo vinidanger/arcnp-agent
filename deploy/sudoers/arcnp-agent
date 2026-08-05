@@ -32,6 +32,7 @@ arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/tail-log.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-ftp.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-app.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/install-wordpress.sh *
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/toggle-php-extension.sh *
 
 # Uma linha por versão de PHP suportada (config/provisioning.php) — cada
 # uma isolada no próprio serviço, reload de uma nunca afeta as outras.

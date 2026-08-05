@@ -21,26 +21,43 @@ return [
      * lado a lado do PHP padrão do sistema — cada um já traz seu próprio
      * systemd service e diretório de pool prontos, só reaproveitamos.
      */
+    /*
+     * ini_dir/binary: usados só pelo gerenciamento de extensões
+     * (php.list_extensions/php.toggle_extension). Inferidos a partir da
+     * mesma convenção Remi já usada pro pool_dir (/etc/opt/remi/php{v}/)
+     * — NUNCA verificados contra uma VPS real (esse ambiente de dev não
+     * tem Remi/RHEL). Confirme no primeiro deploy: `{binary} --ini` e
+     * confira a linha "Scan for additional .ini files in" bate com
+     * ini_dir configurado aqui antes de confiar na feature.
+     */
     'php_versions' => [
         '8.1' => [
             'pool_dir' => '/etc/opt/remi/php81/php-fpm.d',
             'socket_dir' => '/run/php81-fpm',
             'service' => 'php81-php-fpm',
+            'ini_dir' => '/etc/opt/remi/php81/php.d',
+            'binary' => '/usr/bin/php81',
         ],
         '8.2' => [
             'pool_dir' => '/etc/opt/remi/php82/php-fpm.d',
             'socket_dir' => '/run/php82-fpm',
             'service' => 'php82-php-fpm',
+            'ini_dir' => '/etc/opt/remi/php82/php.d',
+            'binary' => '/usr/bin/php82',
         ],
         '8.3' => [
             'pool_dir' => '/etc/php-fpm-hosting.d',
             'socket_dir' => '/run/php-fpm-hosting',
             'service' => 'php-fpm-hosting',
+            'ini_dir' => '/etc/php.d',
+            'binary' => '/usr/bin/php',
         ],
         '8.4' => [
             'pool_dir' => '/etc/opt/remi/php84/php-fpm.d',
             'socket_dir' => '/run/php84-fpm',
             'service' => 'php84-php-fpm',
+            'ini_dir' => '/etc/opt/remi/php84/php.d',
+            'binary' => '/usr/bin/php84',
         ],
     ],
 

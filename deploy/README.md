@@ -1536,3 +1536,51 @@ verdade só dá pra testar depois do deploy — não existe localmente):
    `index.html` simples) e confirme que aparece extraído no domínio.
 5. Remova as duas instalações pelo Painel e confirme que os arquivos
    (e o banco, no caso do WordPress) somem.
+
+## 37. Extensões PHP (ativar/desativar, por servidor)
+
+Admin-only, por servidor + versão de PHP (não por conta — extensão é
+instalada a nível de sistema, compartilhada por todas as contas
+naquela versão). Só alterna um `.ini` que **já existe** (renomeando
+pra/de `.ini.disabled`) — instalar uma extensão nova continua sendo
+manual, `dnf install php$v-php-{extensão}` (ver seção 14), porque isso
+afeta todas as contas de uma vez e não é algo pra automatizar atrás de
+um botão sem o admin decidir conscientemente.
+
+**Importante — caminhos não verificados numa VPS real**: `ini_dir` e
+`binary` de cada versão em `config/provisioning.php` foram inferidos a
+partir do mesmo padrão já usado pro `pool_dir` (`/etc/opt/remi/php$v/`)
+— esse ambiente de desenvolvimento não tem Remi/RHEL pra confirmar de
+verdade. **Antes de confiar na feature**, rode em cada versão:
+
+```
+php81 --ini
+php82 --ini
+php --ini      # 8.3, é o padrão do sistema
+php84 --ini
+```
+
+E confira se a linha `Scan for additional .ini files in` bate
+exatamente com o `ini_dir` configurado pra essa versão. Se não bater,
+ajuste `config/provisioning.php` antes de usar a tela de extensões —
+senão o toggle vai mexer no diretório errado (na pior hipótese, listar
+vazio; o script `toggle-php-extension.sh` só aceita os 4 diretórios
+fixos configurados nele mesmo, então na pior hipótese falha alto,
+nunca escreve fora do esperado).
+
+Sem passo de deploy adicional além do de sempre:
+
+```
+chmod +x scripts/toggle-php-extension.sh
+git update-index --chmod=+x scripts/toggle-php-extension.sh
+
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+**Teste pós-deploy**: na tela do servidor no Painel, abra "Extensões
+PHP", troque a versão no seletor e confirme que a lista bate com
+`php$v -m`. Desative uma extensão de teste (ex. `redis`, se instalada)
+e confirme com `php$v -m` que ela some da lista — depois reative e
+confirme que volta. Confirme que o PHP-FPM daquela versão foi
+recarregado (`systemctl status php$v-php-fpm`, sem erro) a cada toggle.
