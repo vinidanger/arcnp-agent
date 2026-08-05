@@ -212,7 +212,10 @@ dedicado dentro de `public_html` e seu próprio vhost).
 **Desde a seção 38, contas NÃO usam mais o `php$v-php-fpm.service`
 compartilhado abaixo** — só os PACOTES (binário + extensões) desta
 seção continuam necessários, porque `config('provisioning.php_versions')`
-aponta pra eles (`/usr/bin/php81` etc.) no `ExecStart` do processo
+aponta pro binário do DAEMON php-fpm de cada versão
+(`/opt/remi/php$v/root/usr/sbin/php-fpm` — confirmado numa VPS real via
+`systemctl cat php$v-php-fpm.service`, **não** `/usr/bin/php$v`, que é
+só o CLI e não aceita `--fpm-config`) no `ExecStart` do processo
 dedicado de cada conta. O trecho de habilitar
 `php$v-php-fpm`/placeholder pool fica só como referência histórica —
 pode pular direto pro `dnf install` e ir pra seção 38.

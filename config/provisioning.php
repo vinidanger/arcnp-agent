@@ -38,31 +38,38 @@ return [
      * workers do FPM são filhos do processo mestre e herdam o cgroup
      * dele automaticamente ao nascer.
      *
-     * binary/ini_dir continuam por versão (é o que aponta pro binário
-     * certo no ExecStart e pro diretório de extensões certo). 8.1/8.2/
-     * 8.4 vêm do Remi como Software Collections (SCL); ini_dir/binary
-     * são INFERIDOS pela mesma convenção Remi, NUNCA verificados contra
-     * uma VPS real (esse ambiente de dev não tem Remi/RHEL). Confirme
-     * no primeiro deploy: `{binary} --ini` e confira a linha "Scan for
-     * additional .ini files in" bate com ini_dir configurado aqui antes
-     * de confiar na feature.
+     * binary = binário do DAEMON php-fpm (não o CLI!) — é o que entra
+     * no ExecStart do unit dedicado da conta. Confirmado numa VPS real
+     * via `systemctl cat php81-php-fpm.service` (etc.) antes de existir
+     * o service por conta — Remi usa Software Collections de verdade
+     * (root próprio em /opt/remi/php$v/root/...), não o padrão
+     * "/usr/bin/php$v" que eu tinha assumido inicialmente (esse é só o
+     * CLI, `--fpm-config` não é opção dele, causa crash-loop).
+     *
+     * ini_dir ainda é INFERIDO (não confirmado) — dado que o binário
+     * real mora em /opt/remi/php$v/root/..., o ini_dir provavelmente
+     * também está sob esse prefixo (/opt/remi/php$v/root/etc/php.d ou
+     * similar), não /etc/opt/remi/php$v/php.d como está abaixo. Só
+     * afeta a tela de Extensões PHP (por servidor), não o service por
+     * conta. Confirme com `php81 --ini` (ou o binário CLI equivalente)
+     * antes de confiar na tela de extensões pras versões 8.1/8.2/8.4.
      */
     'php_versions' => [
         '8.1' => [
             'ini_dir' => '/etc/opt/remi/php81/php.d',
-            'binary' => '/usr/bin/php81',
+            'binary' => '/opt/remi/php81/root/usr/sbin/php-fpm',
         ],
         '8.2' => [
             'ini_dir' => '/etc/opt/remi/php82/php.d',
-            'binary' => '/usr/bin/php82',
+            'binary' => '/opt/remi/php82/root/usr/sbin/php-fpm',
         ],
         '8.3' => [
             'ini_dir' => '/etc/php.d',
-            'binary' => '/usr/bin/php',
+            'binary' => '/usr/sbin/php-fpm',
         ],
         '8.4' => [
             'ini_dir' => '/etc/opt/remi/php84/php.d',
-            'binary' => '/usr/bin/php84',
+            'binary' => '/opt/remi/php84/root/usr/sbin/php-fpm',
         ],
     ],
 
