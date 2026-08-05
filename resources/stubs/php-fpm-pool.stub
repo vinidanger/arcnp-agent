@@ -32,3 +32,8 @@ php_admin_value[error_reporting] = {{error_reporting}}
 php_admin_flag[file_uploads] = {{file_uploads}}
 php_admin_flag[short_open_tag] = {{short_open_tag}}
 php_admin_value[disable_functions] = {{disable_functions}}
+
+; Extensões extras ativadas só por essa conta (ver
+; App\Support\PhpFpmPoolSettings::sanitizeExtraExtensions) — bloco
+; multi-linha, uma diretiva por extensão, vazio se nenhuma escolhida.
+{{extra_extensions_lines}}

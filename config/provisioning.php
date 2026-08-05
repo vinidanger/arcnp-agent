@@ -88,5 +88,6 @@ return [
         'file_uploads' => 'On',
         'short_open_tag' => 'Off',
         'disable_functions' => '',
+        'extra_extensions' => '',
     ],
 ];

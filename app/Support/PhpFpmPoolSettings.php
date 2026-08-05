@@ -32,6 +32,7 @@ class PhpFpmPoolSettings
         'file_uploads',
         'short_open_tag',
         'disable_functions',
+        'extra_extensions',
     ];
 
     /**
@@ -55,6 +56,40 @@ class PhpFpmPoolSettings
     }
 
     /**
+     * "extra_extensions" é por conta, diferente do resto do gerenciamento
+     * de extensões (que é por servidor/versão, ver PhpExtensionController
+     * no Painel) — não dá pra usar um whitelist estático como
+     * DISABLABLE_FUNCTIONS porque "quais extensões existem" varia por
+     * servidor. Em vez disso revalida contra
+     * PhpExtensionList::availableForPerAccountOptIn(), que já garante que
+     * só extensões "extension" (não zend) e atualmente desativadas a
+     * nível de servidor entram na lista — exatamente o conjunto seguro
+     * pra ativar só num pool.
+     */
+    public static function sanitizeExtraExtensions(string $phpVersion, string $value): string
+    {
+        $requested = array_filter(array_map('trim', explode(',', $value)));
+        $available = array_column(PhpExtensionList::availableForPerAccountOptIn($phpVersion), 'name');
+        $allowed = array_values(array_intersect($requested, $available));
+
+        return implode(',', $allowed);
+    }
+
+    /**
+     * Gera as linhas php_admin_value[extension] pro placeholder
+     * {{extra_extensions_lines}} do stub — um valor por linha, diferente
+     * dos outros TUNABLE_KEYS (um placeholder = um valor), porque aqui
+     * "n" extensões viram "n" diretivas de ini.
+     */
+    private static function renderExtraExtensionsLines(string $value): string
+    {
+        $names = array_filter(array_map('trim', explode(',', $value)));
+        $lines = array_map(fn (string $name) => "php_admin_value[extension] = {$name}.so", $names);
+
+        return implode("\n", $lines);
+    }
+
+    /**
      * @return array<string, string>
      */
     public static function variables(string $username, string $phpVersion, array $overrides = []): array
@@ -72,6 +107,8 @@ class PhpFpmPoolSettings
         }
 
         $variables['disable_functions'] = self::sanitizeDisableFunctions((string) $variables['disable_functions']);
+        $variables['extra_extensions'] = self::sanitizeExtraExtensions($phpVersion, (string) $variables['extra_extensions']);
+        $variables['extra_extensions_lines'] = self::renderExtraExtensionsLines($variables['extra_extensions']);
 
         return $variables;
     }
