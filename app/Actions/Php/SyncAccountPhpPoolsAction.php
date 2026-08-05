@@ -31,6 +31,13 @@ use Illuminate\Support\Facades\File;
  * de ambiente do PROCESSO inteiro, não escopável por pool). Domínios
  * SEM lista alguma são pulados (payload vazio = desprovisiona tudo —
  * usado no rollback/exclusão de conta).
+ *
+ * Ao final, também atualiza o ~/.bashrc da conta (ver
+ * buildCliZendProfileBlock()/ProcessRunner::updateCliZendProfile())
+ * pra que zend_extension ativa em algum domínio valha também pro PHP
+ * CLI via SSH da conta — sem isso, `php artisan` (ou qualquer script
+ * dependente de ioncube) rodado via SSH usaria o php.ini padrão do
+ * sistema, sem a extensão, mesmo com o site funcionando certo.
  */
 class SyncAccountPhpPoolsAction implements AgentAction
 {
@@ -67,6 +74,10 @@ class SyncAccountPhpPoolsAction implements AgentAction
         }
 
         $syncedGroupKeys = [];
+        // Zend dirs agrupados por VERSÃO (não por grupo) — usado só pra
+        // montar o wrapper de CLI (updateCliZendProfile()) mais abaixo,
+        // que é por versão/comando (php81, php82...), não por grupo.
+        $versionZendDirs = [];
 
         foreach ($groups as $groupKey => $group) {
             // PHP casta chave de array string numérica ("83") pra int
@@ -76,19 +87,25 @@ class SyncAccountPhpPoolsAction implements AgentAction
             // allGroupKeysForUsername(), e o grupo recém-criado seria
             // apagado como "órfão" na mesma execução.
             $groupKey = (string) $groupKey;
-            $this->applyGroup($username, $groupKey, $group['php_version'], $group['zend_csv'], $group['domains']);
+            $zendDir = $this->applyGroup($username, $groupKey, $group['php_version'], $group['zend_csv'], $group['domains']);
             $syncedGroupKeys[] = $groupKey;
+
+            if ($zendDir !== '') {
+                $versionZendDirs[$group['php_version']][] = $zendDir;
+            }
         }
 
         $this->removeOrphanedGroups($username, $syncedGroupKeys);
+        $this->processRunner->updateCliZendProfile($username, $this->buildCliZendProfileBlock($versionZendDirs));
 
         return ['username' => $username, 'groups' => $syncedGroupKeys];
     }
 
     /**
      * @param  list<array{domain: string, settings: array}>  $domains
+     * @return string caminho do diretório de zend do grupo, ou '' se nenhum
      */
-    private function applyGroup(string $username, string $groupKey, string $phpVersion, string $zendCsv, array $domains): void
+    private function applyGroup(string $username, string $groupKey, string $phpVersion, string $zendCsv, array $domains): string
     {
         $zendIniLines = PhpFpmPoolSettings::buildZendIniLines($phpVersion, $zendCsv);
         $zendDir = PhpFpmPool::applyZendIni($username, $groupKey, $zendIniLines);
@@ -112,6 +129,40 @@ class SyncAccountPhpPoolsAction implements AgentAction
         $serviceContent = $this->templateRenderer->render('php-fpm-master.service', $globalVariables);
 
         $this->processRunner->applyPhpFpmService(PhpFpmPool::serviceName($username, $groupKey), $serviceContent);
+
+        return $zendDir;
+    }
+
+    /**
+     * Monta o bloco de wrappers de shell (um por versão de PHP com
+     * zend_extension ativa em algum domínio da conta) que ativam o
+     * PHP_INI_SCAN_DIR também no CLI via SSH — mesmo raciocínio do FPM
+     * (ver applyGroup()), só que aqui é por VERSÃO (o CLI não tem
+     * conceito de "domínio"), então usa a UNIÃO de todos os diretórios
+     * de zend daquela versão entre os domínios da conta. "command
+     * {$cli}" (não o caminho direto do binário) evita depender de
+     * saber o caminho exato — deixa o PATH da conta resolver, e evita
+     * a função recursar nela mesma.
+     *
+     * @param  array<string, list<string>>  $versionZendDirs
+     */
+    private function buildCliZendProfileBlock(array $versionZendDirs): string
+    {
+        $lines = [];
+
+        foreach ($versionZendDirs as $phpVersion => $dirs) {
+            $config = PhpVersion::config($phpVersion);
+            $cli = $config['cli_command'] ?? null;
+
+            if ($cli === null || empty($dirs)) {
+                continue;
+            }
+
+            $scanDir = implode(':', array_unique($dirs)).':'.$config['ini_dir'];
+            $lines[] = "{$cli}() { PHP_INI_SCAN_DIR=\"{$scanDir}\" command {$cli} \"\$@\"; }";
+        }
+
+        return implode("\n", $lines);
     }
 
     /**

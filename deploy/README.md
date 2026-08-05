@@ -2008,3 +2008,58 @@ reative e confirme que todos voltam. Rode
 `php artisan php-fpm:migrate-to-per-domain-pools` numa conta antiga
 (criada antes desta feature) e confirme que ela migra sem downtime
 visível.
+
+## 41. zend_extension também no PHP CLI (via SSH)
+
+Achado real em produção: um domínio com ioncube ativo funcionava certo
+via web (PHP-FPM), mas `php artisan ...` rodado via SSH continuava
+dando erro de ionCube ausente. Motivo: o `PHP_INI_SCAN_DIR` da seção
+39/40 só é aplicado no `Environment=` do systemd unit do PHP-FPM
+daquele grupo — o `php` que o SSH usa é o binário CLI comum do
+sistema, que nunca passa por esse unit, então nunca vê a variável.
+
+Corrigido escrevendo um bloco gerenciado (marcadores
+`# BEGIN/END ARCNP-PHP-CLI`, nunca mexe no resto do arquivo) no
+`~/.bashrc` da conta, toda vez que `SyncAccountPhpPoolsAction` roda —
+um wrapper de shell por VERSÃO de PHP que tem zend_extension ativa em
+PELO MENOS UM domínio da conta (o CLI não tem conceito de "domínio", só
+de comando — `php`, `php81`, `php82`, `php84` —, então usa a UNIÃO de
+todos os diretórios de zend daquela versão entre os domínios):
+
+```bash
+# BEGIN ARCNP-PHP-CLI (gerado automaticamente pelo Painel — não editar)
+php() { PHP_INI_SCAN_DIR="/etc/arcnp-php/testehos-83-za1b2c3d4-zend.d:/etc/php.d" command php "$@"; }
+# END ARCNP-PHP-CLI
+```
+
+`command php` (não o caminho direto do binário) evita a função
+recursar nela mesma e evita depender de saber o caminho exato de cada
+versão — usa o que já está no PATH da conta (os comandos `php81`/
+`php82`/`php84` já existem por causa do Remi, ver seção 14). Conta sem
+NENHUMA zend_extension em lugar nenhum não ganha bloco nenhum (e se já
+tinha um bloco de uma configuração anterior, ele é removido).
+
+**Novo, requer instalação do script + sudoers**:
+
+```
+chmod +x scripts/manage-cli-zend-profile.sh
+git update-index --chmod=+x scripts/manage-cli-zend-profile.sh
+
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+(o `install`/`visudo -c` acima já reinstala o arquivo de sudoers
+inteiro — reaproveita o mesmo passo já documentado nas seções
+anteriores, cobre a linha nova também.)
+
+**Teste pós-deploy**: ative uma zend_extension num domínio de teste,
+confirme que o `~/.bashrc` da conta ganhou o bloco (`cat
+~/.bashrc` via SSH como a própria conta, ou `su - {username} -c 'cat
+~/.bashrc'` como root — **atenção**: `su -` pode não carregar uma
+sessão PAM/logind nova nessa VPS, comportamento já documentado como
+pegadinha de metodologia na Fase 5; prefira testar via SSH real). Rode
+`php -v` (ou `php artisan` de um projeto que dependa de ionCube) via
+SSH e confirme que funciona sem erro. Desative a extensão de novo e
+confirme que o bloco some do `~/.bashrc` e o `php -v` volta a reportar
+sem ionCube.

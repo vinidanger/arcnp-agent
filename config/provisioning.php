@@ -54,22 +54,35 @@ return [
      * conta. Confirme com `php81 --ini` (ou o binário CLI equivalente)
      * antes de confiar na tela de extensões pras versões 8.1/8.2/8.4.
      */
+    /**
+     * "cli_command" é o comando de CLI dessa versão já disponível no
+     * PATH da conta via SSH (ex. o próprio Remi já instala "php81"/
+     * "php82"/"php84" como wrappers SCL; "php" é o padrão do sistema,
+     * 8.3) — usado só por App\Actions\Php\SyncAccountPhpPoolsAction
+     * pra montar o wrapper de shell que ativa zend_extension também no
+     * CLI da conta (ver seção 41 do deploy/README.md). Não é o caminho
+     * do binário do FPM ("binary" acima) — são coisas diferentes.
+     */
     'php_versions' => [
         '8.1' => [
             'ini_dir' => '/etc/opt/remi/php81/php.d',
             'binary' => '/opt/remi/php81/root/usr/sbin/php-fpm',
+            'cli_command' => 'php81',
         ],
         '8.2' => [
             'ini_dir' => '/etc/opt/remi/php82/php.d',
             'binary' => '/opt/remi/php82/root/usr/sbin/php-fpm',
+            'cli_command' => 'php82',
         ],
         '8.3' => [
             'ini_dir' => '/etc/php.d',
             'binary' => '/usr/sbin/php-fpm',
+            'cli_command' => 'php',
         ],
         '8.4' => [
             'ini_dir' => '/etc/opt/remi/php84/php.d',
             'binary' => '/opt/remi/php84/root/usr/sbin/php-fpm',
+            'cli_command' => 'php84',
         ],
     ],
 

@@ -58,6 +58,22 @@ class ProcessRunner
     }
 
     /**
+     * Reescreve o bloco de wrappers de zend_extension no ~/.bashrc da
+     * conta (ver manage-cli-zend-profile.sh) — $block vazio remove o
+     * bloco inteiro.
+     */
+    public function updateCliZendProfile(string $username, string $block): void
+    {
+        $result = Process::timeout(10)->input($block)->run([
+            'sudo', '-n', base_path('scripts/manage-cli-zend-profile.sh'), $username,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Falha ao atualizar o perfil de CLI: '.trim($result->errorOutput() ?: $result->output()));
+        }
+    }
+
+    /**
      * Reload gracioso (SIGUSR2) — só pra troca de tunables do pool, sem
      * mexer no unit nem trocar o binário (diferente de applyPhpFpmService).
      */
