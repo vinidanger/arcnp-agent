@@ -36,6 +36,7 @@ class PhpFpmPoolSettings
         'short_open_tag',
         'disable_functions',
         'extra_extensions',
+        'zend_extensions',
     ];
 
     /**
@@ -93,6 +94,37 @@ class PhpFpmPoolSettings
     }
 
     /**
+     * "zend_extensions" é ativado via flag -d no ExecStart do unit
+     * dedicado da conta (ver renderZendExtensionFlags()), não via
+     * php_admin_value — zend_extension só pode ser setado no boot do
+     * processo, nunca por pool. Revalida contra
+     * PhpExtensionList::availableZendExtensionsForPerAccountOptIn(),
+     * mesmo raciocínio de sanitizeExtraExtensions().
+     */
+    public static function sanitizeZendExtensions(string $phpVersion, string $value): string
+    {
+        $requested = array_filter(array_map('trim', explode(',', $value)));
+        $available = array_column(PhpExtensionList::availableZendExtensionsForPerAccountOptIn($phpVersion), 'name');
+        $allowed = array_values(array_intersect($requested, $available));
+
+        return implode(',', $allowed);
+    }
+
+    /**
+     * Gera as flags "-d zend_extension=nome.so" pro placeholder
+     * {{zend_extension_flags}} do ExecStart — cada flag já vem com um
+     * espaço na frente, pra colar direto depois de "--nodaemonize" sem
+     * sobrar espaço nem faltar quando a lista está vazia.
+     */
+    private static function renderZendExtensionFlags(string $value): string
+    {
+        $names = array_filter(array_map('trim', explode(',', $value)));
+        $flags = array_map(fn (string $name) => " -d zend_extension={$name}.so", $names);
+
+        return implode('', $flags);
+    }
+
+    /**
      * @return array<string, string>
      */
     public static function variables(string $username, string $phpVersion, array $overrides = []): array
@@ -114,6 +146,8 @@ class PhpFpmPoolSettings
         $variables['disable_functions'] = self::sanitizeDisableFunctions((string) $variables['disable_functions']);
         $variables['extra_extensions'] = self::sanitizeExtraExtensions($phpVersion, (string) $variables['extra_extensions']);
         $variables['extra_extensions_lines'] = self::renderExtraExtensionsLines($variables['extra_extensions']);
+        $variables['zend_extensions'] = self::sanitizeZendExtensions($phpVersion, (string) $variables['zend_extensions']);
+        $variables['zend_extension_flags'] = self::renderZendExtensionFlags($variables['zend_extensions']);
 
         return $variables;
     }

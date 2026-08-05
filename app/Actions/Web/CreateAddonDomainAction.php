@@ -11,6 +11,7 @@ use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
 use App\Support\PhpFpmPool;
 use App\Support\PhpVersion;
+use App\Support\PublicPath;
 use App\Support\Subdirectory;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
@@ -52,7 +53,7 @@ class CreateAddonDomainAction implements AgentAction
         $homeDir = config('provisioning.home_base_dir')."/{$username}";
         $subdir = $location === 'outside' ? null : Subdirectory::validate($payload['subdir'] ?? '');
         $target = $location === 'outside' ? $domain : $subdir;
-        $publicPath = blank($payload['public_path'] ?? null) ? null : Subdirectory::validate($payload['public_path']);
+        $publicPath = blank($payload['public_path'] ?? null) ? null : PublicPath::validate($payload['public_path']);
         $documentRoot = DocumentRoot::resolve($homeDir, $domain, $location, $subdir, $publicPath);
 
         $this->processRunner->createAddonDirectory($username, $location, $target);

@@ -40,6 +40,7 @@ use App\Actions\Php\ListPhpExtensionsAction;
 use App\Actions\Php\SwitchPhpVersionAction;
 use App\Actions\Php\TogglePhpExtensionAction;
 use App\Actions\Php\UpdatePhpFpmPoolSettingsAction;
+use App\Actions\Php\UpdateZendExtensionsAction;
 use App\Actions\Resources\GetResourceUsageAction;
 use App\Actions\Resources\SetResourceLimitsAction;
 use App\Actions\Server\CollectServerInfoAction;
@@ -91,6 +92,7 @@ class ActionRegistry
         'web.delete_addon_domain' => DeleteAddonDomainAction::class,
         'php.switch_version' => SwitchPhpVersionAction::class,
         'php.update_pool_settings' => UpdatePhpFpmPoolSettingsAction::class,
+        'php.update_zend_extensions' => UpdateZendExtensionsAction::class,
         'php.list_extensions' => ListPhpExtensionsAction::class,
         'php.toggle_extension' => TogglePhpExtensionAction::class,
         'web.update_vhost_php_version' => UpdateVirtualHostPhpVersionAction::class,

@@ -11,6 +11,7 @@ use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
 use App\Support\PhpFpmPool;
 use App\Support\PhpVersion;
+use App\Support\PublicPath;
 use App\Support\Subdirectory;
 use Illuminate\Support\Facades\File;
 
@@ -43,7 +44,7 @@ class UpdateVirtualHostPhpVersionAction implements AgentAction
         $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
         PhpVersion::config($phpVersion);
         $sslActive = (bool) ($payload['ssl_active'] ?? false);
-        $publicPath = blank($payload['public_path'] ?? null) ? null : Subdirectory::validate($payload['public_path']);
+        $publicPath = blank($payload['public_path'] ?? null) ? null : PublicPath::validate($payload['public_path']);
 
         $homeDir = config('provisioning.home_base_dir')."/{$username}";
         $documentRoot = DocumentRoot::resolve($homeDir, $domain, $location, $subdir, $publicPath);

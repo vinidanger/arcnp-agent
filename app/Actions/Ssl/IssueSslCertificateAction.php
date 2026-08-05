@@ -11,6 +11,7 @@ use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
 use App\Support\PhpFpmPool;
 use App\Support\PhpVersion;
+use App\Support\PublicPath;
 use App\Support\Subdirectory;
 use Illuminate\Support\Facades\File;
 
@@ -44,7 +45,7 @@ class IssueSslCertificateAction implements AgentAction
         $subdir = blank($payload['subdir'] ?? null) ? null : Subdirectory::validate($payload['subdir']);
         $location = ($payload['location'] ?? null) === 'outside' ? 'outside' : null;
         $mode = ($payload['mode'] ?? 'php') === 'app' ? 'app' : 'php';
-        $publicPath = blank($payload['public_path'] ?? null) ? null : Subdirectory::validate($payload['public_path']);
+        $publicPath = blank($payload['public_path'] ?? null) ? null : PublicPath::validate($payload['public_path']);
 
         $homeDir = config('provisioning.home_base_dir')."/{$username}";
         $documentRoot = $mode === 'app' ? DocumentRoot::resolve($homeDir, $domain, $location, $subdir) : DocumentRoot::resolve($homeDir, $domain, $location, $subdir, $publicPath);

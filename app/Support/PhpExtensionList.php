@@ -70,6 +70,24 @@ class PhpExtensionList
         ));
     }
 
+    /**
+     * Mesma regra de availableForPerAccountOptIn(), só que pro lado
+     * "zend" — usado pelo toggle de zend_extension por conta (via flag
+     * -d no ExecStart do unit dedicado da conta, ver
+     * PhpFpmPoolSettings::renderZendExtensionFlags()), não confundir
+     * com availableForPerAccountOptIn() (que é só "extension" normal,
+     * via php_admin_value[extension]).
+     *
+     * @return list<array{filename: string, name: string}>
+     */
+    public static function availableZendExtensionsForPerAccountOptIn(string $phpVersion): array
+    {
+        return array_values(array_filter(
+            self::forVersion($phpVersion),
+            fn (array $ext) => $ext['type'] === 'zend' && ! $ext['enabled']
+        ));
+    }
+
     private static function friendlyName(string $filename): string
     {
         $name = preg_replace('/\.ini$/', '', $filename);

@@ -101,5 +101,6 @@ return [
         'short_open_tag' => 'Off',
         'disable_functions' => '',
         'extra_extensions' => '',
+        'zend_extensions' => '',
     ],
 ];
