@@ -59,4 +59,30 @@ class MysqlAdmin
         DB::connection('mysql_admin')->statement("GRANT ALL PRIVILEGES ON `{$dbName}`.* TO `{$username}`@'localhost'");
         DB::connection('mysql_admin')->statement('FLUSH PRIVILEGES');
     }
+
+    /**
+     * Concede acesso a TODOS os bancos cujo nome comece com "{prefix}_"
+     * (todos os bancos de uma conta, ver provisionDatabase() no Painel —
+     * cada banco já nasce como "{linux_username}_{sufixo}") — usado só
+     * pelo usuário "mestre" de uma conta, pra permitir login único no
+     * phpMyAdmin listando todos os bancos de uma vez, em vez de um por
+     * vez via o usuário dedicado de cada banco.
+     *
+     * O alvo de um GRANT em nível de banco aceita curinga de padrão SQL
+     * (_ e %) mesmo entre crases — documentado assim no próprio manual do
+     * MySQL. É isso que torna o wildcard possível aqui, mas também exige
+     * escapar o "_" literal que separa prefixo e sufixo (\_), senão ele
+     * também casaria com qualquer outro caractere naquela posição —
+     * "joao_%" sem escape casaria com "joaox%" de outra conta também.
+     */
+    public function grantAllPrivilegesWildcard(string $prefix, string $username): void
+    {
+        MysqlIdentifier::validate($prefix);
+        MysqlIdentifier::validate($username);
+
+        $pattern = $prefix.'\\_%';
+
+        DB::connection('mysql_admin')->statement("GRANT ALL PRIVILEGES ON `{$pattern}`.* TO `{$username}`@'localhost'");
+        DB::connection('mysql_admin')->statement('FLUSH PRIVILEGES');
+    }
 }

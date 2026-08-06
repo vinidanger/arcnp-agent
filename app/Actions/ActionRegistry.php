@@ -7,7 +7,9 @@ use App\Actions\Backup\DeleteBackupAction;
 use App\Actions\Contracts\AgentAction;
 use App\Actions\Cron\SyncCronJobsAction;
 use App\Actions\Database\CreateMysqlDatabaseAction;
+use App\Actions\Database\CreateMysqlMasterUserAction;
 use App\Actions\Database\DeleteMysqlDatabaseAction;
+use App\Actions\Database\DeleteMysqlMasterUserAction;
 use App\Actions\Demo\DemoAsyncAction;
 use App\Actions\Demo\HealthCheckAction;
 use App\Actions\Disk\DiskUsageAction;
@@ -79,6 +81,8 @@ class ActionRegistry
         'php.sync_account_pools' => SyncAccountPhpPoolsAction::class,
         'database.create_mysql' => CreateMysqlDatabaseAction::class,
         'database.delete_mysql' => DeleteMysqlDatabaseAction::class,
+        'database.create_master_user' => CreateMysqlMasterUserAction::class,
+        'database.delete_master_user' => DeleteMysqlMasterUserAction::class,
         'hosting.suspend' => SuspendHostingAccountAction::class,
         'hosting.reactivate' => ReactivateHostingAccountAction::class,
         'ssl.issue_certificate' => IssueSslCertificateAction::class,
