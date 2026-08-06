@@ -1259,6 +1259,10 @@ pasv_enable=YES
 pasv_min_port=30000
 pasv_max_port=30999
 
+xferlog_enable=YES
+xferlog_file=/var/log/vsftpd.log
+xferlog_std_format=NO
+
 ssl_enable=YES
 force_local_logins_ssl=YES
 force_local_data_ssl=YES
@@ -1282,6 +1286,18 @@ pra log, e como a conta já está com chroot pro home dela [sem
 visto na prática: PAM autentica com sucesso no log, mas o cliente FTP
 nunca recebe o "230 Login successful" e cai por timeout — parece
 queda de TLS, mas é só o servidor pendurado nessa resolução.)
+
+(`xferlog_enable`/`xferlog_std_format=NO` — sem isso, o vsftpd **não
+grava log nenhum por padrão** [`xferlog_enable` é `NO` de fábrica no
+próprio binário]. `xferlog_std_format=NO` faz o vsftpd usar o formato
+de log PRÓPRIO dele (`CONNECT`/`OK LOGIN`/`FAIL LOGIN`), que é o que o
+filtro `vsftpd` do fail2ban [seção 44] sabe interpretar — o formato
+"xferlog" padrão, herdado do wu-ftpd, só registra transferência de
+arquivo bem sucedida, nunca tentativa de login, e não serve pra
+detectar força bruta. Sem essa seção, criar o jail `vsftpd` do
+fail2ban só teria feito o serviço iniciar sem erro — nunca teria
+banido ninguém de verdade, porque o arquivo apontado no `logpath`
+nunca teria nenhuma linha escrita nele.)
 
 Certificado — **autoassinado, de propósito**, diferente do
 `mail_hostname` da seção 22. Let's Encrypt não emite certificado pra
@@ -2160,11 +2176,28 @@ dnf install -y fail2ban
 systemctl enable --now fail2ban
 ```
 
-Jail `sshd` já vem com filtro padrão no pacote. Jail `vsftpd` (a
-recomendação em texto que já existia na seção 33 deste README vira
-automação de verdade agora):
+**Atenção, achado real em deploy**: o PACOTE de fail2ban do AlmaLinux 9
+só traz o FILTRO de `sshd` pronto (`/etc/fail2ban/filter.d/sshd.conf`)
+— o jail em si **não vem habilitado por padrão**
+(`enabled = true` não está setado em nenhum lugar). Sem criar o
+arquivo abaixo, `fail2ban-client status` nunca lista `sshd`, e
+`fail2ban-client status sshd`/`set sshd banip ...` falha com
+`Sorry but the jail 'sshd' does not exist`. Os dois jails (`sshd` e
+`vsftpd`, a recomendação em texto que já existia na seção 33 deste
+README virando automação de verdade agora) precisam ser criados
+explicitamente:
 
 ```
+cat > /etc/fail2ban/jail.d/sshd.local << 'EOF'
+[sshd]
+enabled = true
+port = ssh
+logpath = %(sshd_log)s
+backend = %(sshd_backend)s
+maxretry = 5
+bantime = 3600
+EOF
+
 cat > /etc/fail2ban/jail.d/vsftpd.local << 'EOF'
 [vsftpd]
 enabled = true
@@ -2175,7 +2208,21 @@ bantime = 3600
 EOF
 
 systemctl restart fail2ban
+fail2ban-client status
 ```
+
+(`%(sshd_log)s`/`%(sshd_backend)s` são variáveis de substituição
+próprias do `jail.conf` do fail2ban que detectam sozinhas a origem
+certa do log de SSH no AlmaLinux — journald, não um arquivo fixo.
+Usar um `logpath` hardcoded aqui teria o mesmo risco do jail `vsftpd`
+acima: se o caminho não existe, o fail2ban recusa iniciar o
+serviço **inteiro**, não só aquele jail — um jail com log ausente
+derruba os outros jails já configurados também, então sempre confira
+com `ls -la` que o `logpath` de um jail novo existe de verdade antes
+de reiniciar o serviço. `fail2ban-client status` depois do restart
+deve listar `Jail list: sshd, vsftpd` — se aparecer só um dos dois,
+ou nenhum, o serviço provavelmente falhou ao subir; `systemctl status
+fail2ban` mostra o motivo exato.)
 
 Sudoers (script novo):
 
@@ -2191,7 +2238,13 @@ visudo -c
 (`fail2ban-client set sshd banip 203.0.113.9`), confirmar que ele
 aparece na tela "Segurança" do servidor no Painel, clicar em
 "Desbanir" e confirmar (`fail2ban-client status sshd`) que ele some da
-lista.
+lista. Pro jail `vsftpd` especificamente, não basta confirmar que o
+serviço subiu — teste que ele de fato CAPTURA algo: tente logar com
+uma conta FTP usando senha errada algumas vezes e confirme
+(`tail /var/log/vsftpd.log`) que aparecem linhas `FAIL LOGIN`; se o
+arquivo ficar vazio depois da tentativa, o `xferlog_enable` da seção
+33 não foi aplicado (`vsftpd.conf` desatualizado + `systemctl restart
+vsftpd` pendente).
 
 ## 45. Scanner de malware (ClamAV)
 
