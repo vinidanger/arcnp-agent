@@ -2299,43 +2299,122 @@ nginx que já está servindo tráfego real.
 nginx -V
 ```
 
-Se existir pacote pronto pra distro (varia — AlmaLinux/RHEL 9
-normalmente NÃO tem no repositório padrão, pode precisar de um
-repositório de terceiros confiável ou compilar):
+Não existe pacote pronto pra AlmaLinux 9 nem do `libmodsecurity` nem
+do conector nginx — **precisa compilar os dois**. Procedimento abaixo
+validado de ponta a ponta numa VPS real (AlmaLinux 9, nginx 1.20.1
+oficial nginx.org, `--with-compat`).
+
+**Importante**: os passos de `make`/`make install` do libmodsecurity
+demoram — use `screen`/`tmux` pra não perder o processo se a conexão
+SSH cair ou você fechar o terminal sem querer (fechar a sessão sem
+`screen` mata o build no meio, mesmo sem `Ctrl+C`).
+
+Passo 1 — dependências + compilar o `libmodsecurity`:
 
 ```
-dnf install -y libmodsecurity libmodsecurity-devel
-# Pacote do conector nginx-modsecurity varia por distro — se não
-# existir, precisa compilar como módulo dinâmico contra o nginx já
-# instalado (--add-dynamic-module=... na mesma configure string que
-# gerou o nginx atual, ver "nginx -V" acima).
+dnf install -y gcc gcc-c++ make automake autoconf libtool git \
+  pcre-devel pcre2-devel zlib-devel openssl-devel \
+  libxml2-devel libxslt-devel curl-devel yajl-devel GeoIP-devel \
+  lmdb-devel gd-devel perl-devel perl-ExtUtils-Embed doxygen screen
+
+screen -S waf-build
+
+cd /usr/local/src
+git clone --depth 1 -b v3/master https://github.com/owasp-modsecurity/ModSecurity
+cd ModSecurity
+# --recursive é obrigatório (Mbed TLS é um submódulo ANINHADO — sem
+# --recursive o configure falha com "Mbed TLS was not found")
+git submodule update --init --recursive
+./build.sh
+./configure
+make -j"$(nproc)"
+make install
 ```
 
-OWASP CRS:
+(Sem `--prefix` no `./configure`, o ModSecurity instala em
+`/usr/local/modsecurity`, não em `/usr/local` — confirmar com
+`ls /usr/local/modsecurity/lib/libmodsecurity.so*`.)
+
+Registrar a lib no linker (fica fora do path padrão):
 
 ```
+echo "/usr/local/modsecurity/lib" > /etc/ld.so.conf.d/modsecurity.conf
+ldconfig
+```
+
+Passo 2 — compilar o conector como módulo dinâmico, **reaproveitando
+exatamente os mesmos parâmetros de build do nginx já instalado**
+(copiar da saída de `nginx -V` rodado no passo anterior — abaixo é só
+um exemplo, cada servidor tem a própria lista):
+
+```
+cd /usr/local/src
+git clone --depth 1 https://github.com/owasp-modsecurity/ModSecurity-nginx.git
+
+curl -O http://nginx.org/download/nginx-1.20.1.tar.gz   # mesma versão do "nginx -V"
+tar -xzf nginx-1.20.1.tar.gz
+cd nginx-1.20.1
+
+./configure \
+  --prefix=/usr/share/nginx --sbin-path=/usr/sbin/nginx --modules-path=/usr/lib64/nginx/modules \
+  --conf-path=/etc/nginx/nginx.conf --error-log-path=/var/log/nginx/error.log \
+  --http-log-path=/var/log/nginx/access.log \
+  [... reaproveitar TODOS os --with-http_*/--with-mail/--with-stream/etc.
+       exatamente como aparecem no "nginx -V" do servidor, senão o
+       configure pode falhar por dependência de um módulo opcional
+       que não estava nos planos (ex.: --with-http_xslt_module=dynamic
+       exige libxslt-devel, --with-http_image_filter_module=dynamic
+       exige gd-devel, --with-http_perl_module=dynamic exige
+       perl-devel — já incluídos acima, mas confira contra a lista
+       real do seu servidor) ...] \
+  --add-dynamic-module=/usr/local/src/ModSecurity-nginx
+
+# só os módulos dinâmicos — NÃO reinstala o nginx principal
+make modules
+cp objs/ngx_http_modsecurity_module.so /usr/lib64/nginx/modules/
+```
+
+Passo 3 — config do ModSecurity (reaproveita o arquivo recomendado
+que já vem no código-fonte compilado — escrever do zero arrisca
+faltar diretiva que o CRS depende, tipo o mapa de unicode):
+
+```
+mkdir -p /etc/nginx/modsecurity
+cp /usr/local/src/ModSecurity/modsecurity.conf-recommended /etc/nginx/modsecurity/modsecurity.conf
+cp /usr/local/src/ModSecurity/unicode.mapping /etc/nginx/modsecurity/
+
+# já nasce com "SecRuleEngine DetectionOnly" — confirmar, nunca
+# trocar pra "On" nesse primeiro momento:
+grep SecRuleEngine /etc/nginx/modsecurity/modsecurity.conf
+
+sed -i 's#SecAuditLog .*#SecAuditLog /var/log/nginx/modsecurity_audit.log#' /etc/nginx/modsecurity/modsecurity.conf
+
 mkdir -p /etc/nginx/modsecurity-crs
-curl -L https://github.com/coreruleset/coreruleset/archive/refs/tags/v4.x.x.tar.gz -o /tmp/crs.tar.gz
+curl -L https://github.com/coreruleset/coreruleset/archive/refs/tags/v4.7.0.tar.gz -o /tmp/crs.tar.gz
 tar -xzf /tmp/crs.tar.gz -C /etc/nginx/modsecurity-crs --strip-components=1
 cp /etc/nginx/modsecurity-crs/crs-setup.conf.example /etc/nginx/modsecurity-crs/crs-setup.conf
-```
 
-`/etc/nginx/modsecurity/modsecurity.conf` — **começar com
-`SecRuleEngine DetectionOnly`**, nunca `On` de cara:
-
-```
-SecRuleEngine DetectionOnly
-SecRequestBodyAccess On
-SecAuditEngine RelevantOnly
-SecAuditLog /var/log/nginx/modsecurity_audit.log
+cat >> /etc/nginx/modsecurity/modsecurity.conf << 'EOF'
 Include /etc/nginx/modsecurity-crs/crs-setup.conf
 Include /etc/nginx/modsecurity-crs/rules/*.conf
+EOF
 ```
 
-`nginx.conf` (bloco `http {}`, carrega o módulo):
+Passo 4 — carregar o módulo. **Duas pegadinhas reais encontradas em
+produção**: (a) `load_module` só é válido no contexto PRINCIPAL do
+`nginx.conf`, fora de qualquer bloco `http {}`/`server {}` — colocar
+dentro do `http{}` é erro de sintaxe; (b) o caminho no `load_module`
+tem que ser ABSOLUTO — a forma relativa `modules/nome.so` (comum em
+tutoriais) é resolvida a partir do `--prefix` do nginx, não do
+`--modules-path`, e nesta instalação os dois são diretórios
+DIFERENTES (`/usr/share/nginx` vs `/usr/lib64/nginx/modules`), o que
+faz o nginx procurar o `.so` no lugar errado e falhar com
+`dlopen() ... cannot open shared object file`:
 
 ```
-load_module modules/ngx_http_modsecurity_module.so;
+sed -i '1a load_module /usr/lib64/nginx/modules/ngx_http_modsecurity_module.so;' /etc/nginx/nginx.conf
+
+nginx -t && systemctl reload nginx
 ```
 
 O WAF é OPT-IN por domínio (`waf_enabled`, ver Painel) — o vhost só
@@ -2348,17 +2427,17 @@ modsecurity on;
 modsecurity_rules_file /etc/nginx/modsecurity/modsecurity.conf;
 ```
 
-```
-nginx -t && systemctl reload nginx
-```
-
 **Depois de rodar em `DetectionOnly` por um tempo sem falso positivo
 afetando conta real** (conferir `/var/log/nginx/modsecurity_audit.log`),
 trocar pra `SecRuleEngine On` manualmente — o painel não faz essa
 troca sozinho.
 
-**Teste pós-deploy**: ligar o WAF numa conta de teste, tentar uma
-requisição de SQLi óbvia (ex. `?id=1' OR '1'='1`) contra um domínio
-dessa conta, confirmar que aparece no `modsecurity_audit.log` (modo
-`DetectionOnly`) ou que é bloqueada (modo `On`); confirmar que uma
-conta SEM o toggle ligado não é afetada em nada.
+**Teste pós-deploy — confirmado funcionando de ponta a ponta**: ligar
+o WAF numa conta de teste (botão "WAF" na tabela de Domínios),
+confirmar que o site continua respondendo normal, tentar uma
+requisição de SQLi óbvia (ex. `?id=1' OR '1'='1`) e confirmar no
+`modsecurity_audit.log` a detecção real via libinjection (regra
+`942100`, OWASP_CRS) com o score de anomalia calculado (regra
+`949110`) — em `DetectionOnly` só loga (`ModSecurity: Warning...`),
+não bloqueia; confirmar que uma conta SEM o toggle ligado não é
+afetada em nada.
