@@ -662,6 +662,89 @@ class ProcessRunner
     }
 
     /**
+     * Versão de cada serviço, melhor esforço — diferente de
+     * serviceStatuses(), não tem um comando único que sirva pra todos:
+     * cada binário tem sua própria flag de versão (e a maioria imprime
+     * no stderr, não no stdout, ex.: "nginx -v"). Uma unit sem comando
+     * mapeado (e sem binário localizável) devolve null — o Painel mostra
+     * "—" nesse caso, sem quebrar a tela. $mysqlServiceName é passado à
+     * parte (não fixo, varia mysqld/mariadb conforme o que foi
+     * instalado) pra tentar os dois binários mais comuns.
+     *
+     * @param  list<string>  $units
+     * @return array<string, ?string>
+     */
+    public function serviceVersions(array $units, ?string $mysqlServiceName = null): array
+    {
+        $versions = [];
+
+        foreach ($units as $unit) {
+            $versions[$unit] = $unit === $mysqlServiceName
+                ? $this->detectMysqlVersion()
+                : $this->detectServiceVersion($unit);
+        }
+
+        return $versions;
+    }
+
+    private const SERVICE_VERSION_COMMANDS = [
+        'nginx' => ['nginx', '-v'],
+        'postfix' => ['postconf', '-h', 'mail_version'],
+        'dovecot' => ['dovecot', '--version'],
+        'opendkim' => ['opendkim', '-V'],
+        'named' => ['named', '-v'],
+        'vsftpd' => ['vsftpd', '-v'],
+        'ttyd' => ['ttyd', '--version'],
+    ];
+
+    /**
+     * "php{81|82|84}-php-fpm"/"php-fpm-hosting" não são binário nenhum
+     * no PATH (são nome de unit systemd da arquitetura antiga, pré-Fase
+     * 5 — ver plano/README) — o binário de verdade por versão já está
+     * mapeado em config('provisioning.php_versions'), reaproveitado
+     * aqui em vez de hardcodar caminho de novo.
+     */
+    private const PHP_FPM_UNIT_VERSIONS = [
+        'php81-php-fpm' => '8.1',
+        'php82-php-fpm' => '8.2',
+        'php-fpm-hosting' => '8.3',
+        'php84-php-fpm' => '8.4',
+    ];
+
+    private function detectServiceVersion(string $unit): ?string
+    {
+        $command = self::SERVICE_VERSION_COMMANDS[$unit] ?? null;
+
+        if ($command === null && isset(self::PHP_FPM_UNIT_VERSIONS[$unit])) {
+            $binary = config('provisioning.php_versions.'.self::PHP_FPM_UNIT_VERSIONS[$unit].'.binary');
+            $command = $binary ? [$binary, '-v'] : null;
+        }
+
+        if ($command === null) {
+            return null;
+        }
+
+        return $this->extractVersion($command);
+    }
+
+    private function detectMysqlVersion(): ?string
+    {
+        return $this->extractVersion(['mysqld', '--version']) ?? $this->extractVersion(['mariadbd', '--version']);
+    }
+
+    private function extractVersion(array $command): ?string
+    {
+        $result = Process::timeout(5)->run($command);
+        $output = trim($result->output()."\n".$result->errorOutput());
+
+        if ($output === '') {
+            return null;
+        }
+
+        return preg_match('/(\d+\.\d+(?:\.\d+)?)/', $output, $matches) ? $matches[1] : null;
+    }
+
+    /**
      * CPU/RAM/processos/I-O da conta, via cgroup nativo do systemd
      * (user-{uid}.slice — ver set-resource-limits.sh). Sem sudo:
      * "systemctl set-property" (escrita) exige privilégio, mas

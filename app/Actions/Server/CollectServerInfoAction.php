@@ -53,6 +53,7 @@ class CollectServerInfoAction implements AgentAction
         return [
             'system' => $this->processRunner->collectSystemInfo(),
             'services' => $this->processRunner->serviceStatuses($units),
+            'service_versions' => $this->processRunner->serviceVersions($units, $mysqlServiceName ?: null),
         ];
     }
 }
