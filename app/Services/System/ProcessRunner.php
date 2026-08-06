@@ -732,9 +732,22 @@ class ProcessRunner
         return $this->extractVersion(['mysqld', '--version']) ?? $this->extractVersion(['mariadbd', '--version']);
     }
 
+    /**
+     * O Agent roda como usuário sem privilégio (arcnpagent) — dependendo
+     * de como o PHP-FPM que serve ele foi configurado, o PATH herdado
+     * pode não incluir /usr/sbin ou /sbin, onde a maioria destes binários
+     * mora (nginx, postconf, dovecot, named, vsftpd, mysqld...). Sem
+     * isso, TODO comando aqui falharia com "not found" — exatamente o
+     * sintoma de "nenhum serviço mostra versão" mesmo com o status
+     * batendo certo (systemctl is-active não depende de PATH do jeito
+     * que invocar o binário direto depende). Forçando o PATH aqui evita
+     * depender de como cada ambiente de deploy configurou a variável.
+     */
+    private const VERSION_COMMAND_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+
     private function extractVersion(array $command): ?string
     {
-        $result = Process::timeout(5)->run($command);
+        $result = Process::timeout(5)->env(['PATH' => self::VERSION_COMMAND_PATH])->run($command);
         $output = trim($result->output()."\n".$result->errorOutput());
 
         if ($output === '') {
