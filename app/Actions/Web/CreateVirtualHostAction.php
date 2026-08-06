@@ -58,15 +58,7 @@ class CreateVirtualHostAction implements AgentAction
             'waf_directives' => WafDirectives::render((bool) ($payload['waf_enabled'] ?? false)),
         ]);
 
-        File::put($configPath, $contents);
-
-        try {
-            $this->processRunner->testNginxConfig();
-            $this->processRunner->reloadNginx();
-        } catch (\Throwable $e) {
-            File::delete($configPath);
-            throw $e;
-        }
+        NginxVhost::writeTested($configPath, $contents, $this->processRunner);
 
         return ['domain' => $domain, 'config_path' => $configPath];
     }

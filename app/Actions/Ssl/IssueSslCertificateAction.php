@@ -14,7 +14,6 @@ use App\Support\PhpVersion;
 use App\Support\PublicPath;
 use App\Support\Subdirectory;
 use App\Support\WafDirectives;
-use Illuminate\Support\Facades\File;
 
 /**
  * Assíncrona de propósito — depende de chamada de rede externa
@@ -82,10 +81,7 @@ class IssueSslCertificateAction implements AgentAction
             ]);
         }
 
-        File::put(NginxVhost::configPath($domain), $contents);
-
-        $this->processRunner->testNginxConfig();
-        $this->processRunner->reloadNginx();
+        NginxVhost::writeTested(NginxVhost::configPath($domain), $contents, $this->processRunner);
 
         return ['domain' => $domain, 'ssl_issued' => true, 'expires_at' => $expiresAt];
     }

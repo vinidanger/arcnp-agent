@@ -14,7 +14,6 @@ use App\Support\PhpFpmPool;
 use App\Support\PhpVersion;
 use App\Support\Subdirectory;
 use App\Support\WafDirectives;
-use Illuminate\Support\Facades\File;
 
 /**
  * Desfaz CreateHostedAppAction: remove o unit systemd e devolve o vhost
@@ -72,10 +71,7 @@ class DeleteHostedAppAction implements AgentAction
             ]);
         }
 
-        File::put(NginxVhost::configPath($domain), $contents);
-
-        $this->processRunner->testNginxConfig();
-        $this->processRunner->reloadNginx();
+        NginxVhost::writeTested(NginxVhost::configPath($domain), $contents, $this->processRunner);
 
         return ['domain' => $domain];
     }

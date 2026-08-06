@@ -14,7 +14,6 @@ use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
 use App\Support\Subdirectory;
 use App\Support\WafDirectives;
-use Illuminate\Support\Facades\File;
 use InvalidArgumentException;
 use Throwable;
 
@@ -108,10 +107,7 @@ class CreateHostedAppAction implements AgentAction
                     'waf_directives' => $wafDirectives,
                 ]);
 
-            File::put(NginxVhost::configPath($domain), $vhostContents);
-
-            $this->processRunner->testNginxConfig();
-            $this->processRunner->reloadNginx();
+            NginxVhost::writeTested(NginxVhost::configPath($domain), $vhostContents, $this->processRunner);
         } catch (Throwable $e) {
             $this->processRunner->removeAppUnit($unit);
             throw $e;

@@ -14,7 +14,6 @@ use App\Support\PhpVersion;
 use App\Support\PublicPath;
 use App\Support\Subdirectory;
 use App\Support\WafDirectives;
-use Illuminate\Support\Facades\File;
 
 /**
  * Reescreve um vhost já existente pra apontar pro socket certo do
@@ -75,10 +74,7 @@ class UpdateVirtualHostPhpVersionAction implements AgentAction
             ]);
         }
 
-        File::put(NginxVhost::configPath($domain), $contents);
-
-        $this->processRunner->testNginxConfig();
-        $this->processRunner->reloadNginx();
+        NginxVhost::writeTested(NginxVhost::configPath($domain), $contents, $this->processRunner);
 
         return ['domain' => $domain, 'php_version' => $phpVersion];
     }

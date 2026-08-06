@@ -66,13 +66,9 @@ class CreateAddonDomainAction implements AgentAction
             'waf_directives' => WafDirectives::render((bool) ($payload['waf_enabled'] ?? false)),
         ]);
 
-        File::put($configPath, $contents);
-
         try {
-            $this->processRunner->testNginxConfig();
-            $this->processRunner->reloadNginx();
+            NginxVhost::writeTested($configPath, $contents, $this->processRunner);
         } catch (\Throwable $e) {
-            File::delete($configPath);
             $this->processRunner->deleteAddonDirectory($username, $location, $target);
             throw $e;
         }

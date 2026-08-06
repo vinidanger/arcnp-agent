@@ -14,7 +14,6 @@ use App\Support\PhpVersion;
 use App\Support\PublicPath;
 use App\Support\Subdirectory;
 use App\Support\WafDirectives;
-use Illuminate\Support\Facades\File;
 
 /**
  * Reescreve um vhost já existente só pra mudar o public_path (a
@@ -72,10 +71,7 @@ class UpdateDocumentRootAction implements AgentAction
             ]);
         }
 
-        File::put(NginxVhost::configPath($domain), $contents);
-
-        $this->processRunner->testNginxConfig();
-        $this->processRunner->reloadNginx();
+        NginxVhost::writeTested(NginxVhost::configPath($domain), $contents, $this->processRunner);
 
         return ['domain' => $domain, 'document_root' => $documentRoot];
     }
