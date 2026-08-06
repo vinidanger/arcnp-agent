@@ -16,12 +16,18 @@ use App\Services\System\ProcessRunner;
  */
 class CollectServerInfoAction implements AgentAction
 {
+    /**
+     * "php-fpm-hosting"/"php81-php-fpm"/"php82-php-fpm"/"php84-php-fpm"
+     * já não fazem mais parte daqui — eram a arquitetura antiga de
+     * PHP-FPM (um service global por versão), substituída pela
+     * arquitetura por-conta (arcnp-php-{usuário}-{grupo}.service, ver
+     * seção 40 do deploy/README.md). Não dá pra monitorar esses
+     * dinamicamente (nascem/somem por conta), então PHP simplesmente
+     * não aparece nesta tela — confirme uma conta específica olhando
+     * "systemctl status arcnp-php-{usuário}-*" direto no servidor.
+     */
     private const KNOWN_UNITS = [
         'nginx',
-        'php-fpm-hosting',
-        'php81-php-fpm',
-        'php82-php-fpm',
-        'php84-php-fpm',
         'postfix',
         'dovecot',
         'opendkim',

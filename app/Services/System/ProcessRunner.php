@@ -697,28 +697,9 @@ class ProcessRunner
         'ttyd' => ['ttyd', '--version'],
     ];
 
-    /**
-     * "php{81|82|84}-php-fpm"/"php-fpm-hosting" não são binário nenhum
-     * no PATH (são nome de unit systemd da arquitetura antiga, pré-Fase
-     * 5 — ver plano/README) — o binário de verdade por versão já está
-     * mapeado em config('provisioning.php_versions'), reaproveitado
-     * aqui em vez de hardcodar caminho de novo.
-     */
-    private const PHP_FPM_UNIT_VERSIONS = [
-        'php81-php-fpm' => '8.1',
-        'php82-php-fpm' => '8.2',
-        'php-fpm-hosting' => '8.3',
-        'php84-php-fpm' => '8.4',
-    ];
-
     private function detectServiceVersion(string $unit): ?string
     {
         $command = self::SERVICE_VERSION_COMMANDS[$unit] ?? null;
-
-        if ($command === null && isset(self::PHP_FPM_UNIT_VERSIONS[$unit])) {
-            $binary = config('provisioning.php_versions.'.self::PHP_FPM_UNIT_VERSIONS[$unit].'.binary');
-            $command = $binary ? [$binary, '-v'] : null;
-        }
 
         if ($command === null) {
             return null;
