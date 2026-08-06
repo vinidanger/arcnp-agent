@@ -13,6 +13,7 @@ use App\Support\PhpFpmPool;
 use App\Support\PhpVersion;
 use App\Support\PublicPath;
 use App\Support\Subdirectory;
+use App\Support\WafDirectives;
 use Illuminate\Support\Facades\File;
 
 /**
@@ -54,6 +55,8 @@ class UpdateVirtualHostPhpVersionAction implements AgentAction
         $documentRoot = DocumentRoot::resolve($homeDir, $domain, $location, $subdir, $publicPath);
         $socketPath = PhpFpmPool::socketPath($username, $domain);
 
+        $wafDirectives = WafDirectives::render((bool) ($payload['waf_enabled'] ?? false));
+
         if ($sslActive) {
             $contents = $this->templateRenderer->render('nginx-vhost-ssl', [
                 'domain' => $domain,
@@ -61,12 +64,14 @@ class UpdateVirtualHostPhpVersionAction implements AgentAction
                 'php_fpm_socket' => $socketPath,
                 'ssl_cert_path' => "/etc/letsencrypt/live/{$domain}/fullchain.pem",
                 'ssl_cert_key_path' => "/etc/letsencrypt/live/{$domain}/privkey.pem",
+                'waf_directives' => $wafDirectives,
             ]);
         } else {
             $contents = $this->templateRenderer->render('nginx-vhost', [
                 'domain' => $domain,
                 'document_root' => $documentRoot,
                 'php_fpm_socket' => $socketPath,
+                'waf_directives' => $wafDirectives,
             ]);
         }
 

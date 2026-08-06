@@ -12,6 +12,7 @@ use App\Support\NginxVhost;
 use App\Support\PhpFpmPool;
 use App\Support\PhpVersion;
 use App\Support\PublicPath;
+use App\Support\WafDirectives;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
 
@@ -54,6 +55,7 @@ class CreateVirtualHostAction implements AgentAction
             'domain' => $domain,
             'document_root' => $documentRoot,
             'php_fpm_socket' => PhpFpmPool::socketPath($username, $domain),
+            'waf_directives' => WafDirectives::render((bool) ($payload['waf_enabled'] ?? false)),
         ]);
 
         File::put($configPath, $contents);

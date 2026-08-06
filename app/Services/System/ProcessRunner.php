@@ -955,4 +955,97 @@ class ProcessRunner
             );
         }
     }
+
+    /**
+     * Substituto caseiro do "IP reputation" do CloudLinux/Imunify — só a
+     * parte de gerenciamento do fail2ban já instalado (listar/desbanir),
+     * não um sistema de reputação próprio.
+     *
+     * @return list<array{jail: string, ip: string}>
+     */
+    public function listBannedIps(): array
+    {
+        $result = Process::timeout(15)->run(['sudo', '-n', base_path('scripts/manage-fail2ban.sh'), 'list']);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Falha ao listar IPs banidos: '.trim($result->errorOutput() ?: $result->output()));
+        }
+
+        $banned = [];
+
+        foreach (explode("\n", trim($result->output())) as $line) {
+            if ($line === '') {
+                continue;
+            }
+
+            [$jail, $ip] = array_pad(explode("\t", $line, 2), 2, null);
+
+            if ($jail !== null && $ip !== null) {
+                $banned[] = ['jail' => $jail, 'ip' => $ip];
+            }
+        }
+
+        return $banned;
+    }
+
+    public function unbanIp(string $jail, string $ip): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/manage-fail2ban.sh'), 'unban', $jail, $ip]);
+    }
+
+    /**
+     * Substituto caseiro do scanner de malware do CloudLinux/Imunify —
+     * varre a conta INTEIRA (não só public_html, arquivo malicioso pode
+     * estar em qualquer lugar), sem sudo (arcnpagent já tem ACL de
+     * leitura no home da conta, mesmo mecanismo do gerenciador de
+     * arquivos). Timeout longo (30 min) — pode ser um home grande, é
+     * exatamente por isso que a Action que chama isso é assíncrona.
+     *
+     * @return list<array{path: string, signature: string}>
+     */
+    public function scanForMalware(string $username): array
+    {
+        $homeDir = config('provisioning.home_base_dir')."/{$username}";
+
+        $result = Process::timeout(1800)->run(['clamscan', '-r', '-i', '--no-summary', $homeDir]);
+
+        // clamscan: exit 0 = limpo, 1 = infectado encontrado (não é
+        // falha de execução, é o resultado normal), 2+ = erro de
+        // verdade (base de assinatura ausente/corrompida etc.).
+        if ($result->exitCode() > 1) {
+            throw new RuntimeException('Falha ao escanear: '.trim($result->errorOutput() ?: $result->output()));
+        }
+
+        $infected = [];
+        $prefix = $homeDir.'/';
+
+        foreach (explode("\n", trim($result->output())) as $line) {
+            if (! preg_match('/^(.+): (.+) FOUND$/', trim($line), $matches)) {
+                continue;
+            }
+
+            $absolutePath = $matches[1];
+
+            if (! str_starts_with($absolutePath, $prefix)) {
+                continue;
+            }
+
+            $infected[] = [
+                'path' => substr($absolutePath, strlen($prefix)),
+                'signature' => $matches[2],
+            ];
+        }
+
+        return $infected;
+    }
+
+    public function quarantineFile(string $username, string $relPath, string $quarantineFilename): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/manage-quarantine.sh'), $username, 'quarantine', $relPath, $quarantineFilename], 30);
+    }
+
+    public function restoreQuarantinedFile(string $username, string $relPath, string $quarantineFilename): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/manage-quarantine.sh'), $username, 'restore', $relPath, $quarantineFilename], 30);
+    }
 }

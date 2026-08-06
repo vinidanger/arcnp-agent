@@ -45,3 +45,8 @@ arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/reload-php-fpm-for-bina
 # zend_extension também no PHP CLI via SSH (~/.bashrc da conta), ver
 # seção 41 do deploy/README.md.
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-cli-zend-profile.sh *
+
+# Fase C — suíte de segurança (fail2ban/malware/WAF), ver seção 44+ do
+# deploy/README.md.
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-fail2ban.sh *
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-quarantine.sh *

@@ -85,4 +85,27 @@ class MysqlAdmin
         DB::connection('mysql_admin')->statement("GRANT ALL PRIVILEGES ON `{$pattern}`.* TO `{$username}`@'localhost'");
         DB::connection('mysql_admin')->statement('FLUSH PRIVILEGES');
     }
+
+    /**
+     * Substituto caseiro do "database governor" do CloudLinux — só a
+     * parte que o MariaDB de fábrica já suporta nativamente (limite de
+     * conexão simultânea e de query/hora por usuário, via sintaxe padrão
+     * de ALTER USER ... WITH ...). CPU/IO de uma query específica dentro
+     * do mysqld compartilhado fica fora de alcance sem ProxySQL/servidor
+     * modificado — não é isso que este método faz.
+     *
+     * $maxConnections/$maxQueriesPerHour já chegam como inteiro validado
+     * pela Action (nunca string vinda do payload sem passar por (int)),
+     * então interpolar direto aqui é seguro — 0 é o valor nativo do
+     * MySQL/MariaDB pra "sem limite" (mesma conversão null→0 que os
+     * limites de cgroup já fazem com "infinity").
+     */
+    public function applyResourceLimits(string $username, int $maxConnections, int $maxQueriesPerHour): void
+    {
+        MysqlIdentifier::validate($username);
+
+        DB::connection('mysql_admin')->statement(
+            "ALTER USER `{$username}`@'localhost' WITH MAX_USER_CONNECTIONS {$maxConnections} MAX_QUERIES_PER_HOUR {$maxQueriesPerHour}"
+        );
+    }
 }

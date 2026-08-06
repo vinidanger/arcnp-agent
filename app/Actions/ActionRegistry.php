@@ -10,6 +10,7 @@ use App\Actions\Database\CreateMysqlDatabaseAction;
 use App\Actions\Database\CreateMysqlMasterUserAction;
 use App\Actions\Database\DeleteMysqlDatabaseAction;
 use App\Actions\Database\DeleteMysqlMasterUserAction;
+use App\Actions\Database\SetMysqlUserLimitsAction;
 use App\Actions\Demo\DemoAsyncAction;
 use App\Actions\Demo\HealthCheckAction;
 use App\Actions\Disk\DiskUsageAction;
@@ -41,6 +42,12 @@ use App\Actions\Php\SyncAccountPhpPoolsAction;
 use App\Actions\Php\TogglePhpExtensionAction;
 use App\Actions\Resources\GetResourceUsageAction;
 use App\Actions\Resources\SetResourceLimitsAction;
+use App\Actions\Security\CheckWordPressVersionAction;
+use App\Actions\Security\ListBannedIpsAction;
+use App\Actions\Security\QuarantineFileAction;
+use App\Actions\Security\RestoreQuarantinedFileAction;
+use App\Actions\Security\ScanAccountForMalwareAction;
+use App\Actions\Security\UnbanIpAction;
 use App\Actions\Server\CollectServerInfoAction;
 use App\Actions\Ssh\SetSshAccessAction;
 use App\Actions\Ssh\SetSshPasswordAction;
@@ -83,6 +90,7 @@ class ActionRegistry
         'database.delete_mysql' => DeleteMysqlDatabaseAction::class,
         'database.create_master_user' => CreateMysqlMasterUserAction::class,
         'database.delete_master_user' => DeleteMysqlMasterUserAction::class,
+        'database.set_user_limits' => SetMysqlUserLimitsAction::class,
         'hosting.suspend' => SuspendHostingAccountAction::class,
         'hosting.reactivate' => ReactivateHostingAccountAction::class,
         'ssl.issue_certificate' => IssueSslCertificateAction::class,
@@ -131,6 +139,12 @@ class ActionRegistry
         'server.collect_info' => CollectServerInfoAction::class,
         'resources.set_limits' => SetResourceLimitsAction::class,
         'resources.usage' => GetResourceUsageAction::class,
+        'security.list_banned_ips' => ListBannedIpsAction::class,
+        'security.unban_ip' => UnbanIpAction::class,
+        'security.scan_account' => ScanAccountForMalwareAction::class,
+        'security.quarantine_file' => QuarantineFileAction::class,
+        'security.restore_quarantined_file' => RestoreQuarantinedFileAction::class,
+        'security.check_wordpress_version' => CheckWordPressVersionAction::class,
     ];
 
     public static function resolve(string $action): AgentAction

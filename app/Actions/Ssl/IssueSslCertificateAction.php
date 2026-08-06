@@ -13,6 +13,7 @@ use App\Support\PhpFpmPool;
 use App\Support\PhpVersion;
 use App\Support\PublicPath;
 use App\Support\Subdirectory;
+use App\Support\WafDirectives;
 use Illuminate\Support\Facades\File;
 
 /**
@@ -54,6 +55,7 @@ class IssueSslCertificateAction implements AgentAction
 
         $certPath = "/etc/letsencrypt/live/{$domain}/fullchain.pem";
         $keyPath = "/etc/letsencrypt/live/{$domain}/privkey.pem";
+        $wafDirectives = WafDirectives::render((bool) ($payload['waf_enabled'] ?? false));
 
         if ($mode === 'app') {
             $appPort = (int) ($payload['app_port'] ?? 0);
@@ -64,6 +66,7 @@ class IssueSslCertificateAction implements AgentAction
                 'app_port' => $appPort,
                 'ssl_cert_path' => $certPath,
                 'ssl_cert_key_path' => $keyPath,
+                'waf_directives' => $wafDirectives,
             ]);
         } else {
             $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
@@ -75,6 +78,7 @@ class IssueSslCertificateAction implements AgentAction
                 'php_fpm_socket' => PhpFpmPool::socketPath($username, $domain),
                 'ssl_cert_path' => $certPath,
                 'ssl_cert_key_path' => $keyPath,
+                'waf_directives' => $wafDirectives,
             ]);
         }
 

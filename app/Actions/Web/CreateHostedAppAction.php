@@ -13,6 +13,7 @@ use App\Support\HostedAppUnit;
 use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
 use App\Support\Subdirectory;
+use App\Support\WafDirectives;
 use Illuminate\Support\Facades\File;
 use InvalidArgumentException;
 use Throwable;
@@ -89,6 +90,8 @@ class CreateHostedAppAction implements AgentAction
         $this->processRunner->createAppUnit($unit, $unitContent);
 
         try {
+            $wafDirectives = WafDirectives::render((bool) ($payload['waf_enabled'] ?? false));
+
             $vhostContents = $sslActive
                 ? $this->templateRenderer->render('nginx-vhost-app-ssl', [
                     'domain' => $domain,
@@ -96,11 +99,13 @@ class CreateHostedAppAction implements AgentAction
                     'app_port' => $port,
                     'ssl_cert_path' => "/etc/letsencrypt/live/{$domain}/fullchain.pem",
                     'ssl_cert_key_path' => "/etc/letsencrypt/live/{$domain}/privkey.pem",
+                    'waf_directives' => $wafDirectives,
                 ])
                 : $this->templateRenderer->render('nginx-vhost-app', [
                     'domain' => $domain,
                     'document_root' => $documentRoot,
                     'app_port' => $port,
+                    'waf_directives' => $wafDirectives,
                 ]);
 
             File::put(NginxVhost::configPath($domain), $vhostContents);

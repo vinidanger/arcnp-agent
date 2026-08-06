@@ -2073,3 +2073,239 @@ SSH e confirme que funciona sem erro — tanto o de ionCube quanto o de
 classe ausente da extensão normal (ex. `NumberFormatter` do intl).
 Desative as extensões de novo e confirme que o bloco some do
 `~/.bashrc` e os erros voltam a aparecer.
+
+## 42. Isolamento entre contas ("CageFS-lite")
+
+Substituto caseiro (parcial) do CageFS do CloudLinux — não é isolamento
+de filesystem/namespace de verdade (isso é kernel-level, proprietário,
+não dá pra replicar 1:1), só fecha as duas lacunas de visibilidade que
+existem hoje entre contas que compartilham o mesmo servidor: uma conta
+com SSH/Terminal ligado consegue ver os processos de OUTRA conta via
+`ps`/`top` (linha de comando completa incluída — pode vazar segredo
+passado como argumento), e `ls /home` lista o username de toda conta
+do servidor (não o conteúdo — cada home já é `750`, dono exclusivo,
+isso já é protegido).
+
+Nenhuma mudança em Painel/Agent — é configuração de servidor, feita
+uma vez:
+
+```
+# /proc: esconde processo de outras contas do "ps"/"top"/"/proc/{pid}"
+# — só o dono do processo (e root) continua vendo. Confirmado que o
+# Agent não é afetado: resourceUsage()/serviceStatuses() leem via
+# "systemctl show"/"is-active" (systemd/D-Bus), nunca /proc direto.
+mount -o remount,rw,hidepid=2 /proc
+```
+
+Persistir no `/etc/fstab` pra sobreviver a reboot — editar (ou
+adicionar, se não existir) a linha do `/proc`:
+
+```
+proc  /proc  proc  defaults,hidepid=2  0  0
+```
+
+```
+# /home: impede "ls /home" de listar os usernames de outras contas.
+# ACLs de nginx/arcnpagent já são por-diretório individual (setfacl em
+# cada $HOME_DIR na criação da conta, ver create-hosting-user.sh) —
+# não dependem do "outros" ler /home, então isso não quebra nada.
+chmod 711 /home
+```
+
+**Teste pós-deploy**: criar 2 contas de teste, ligar SSH nas duas,
+confirmar que `ps aux`/`top` numa sessão SSH da conta A não mostra
+processo nenhum da conta B (só os da própria A e os do sistema/root);
+confirmar que `ls /home` de uma sessão comum (não root) não lista mais
+as outras contas; confirmar que o Agent continua funcionando normal
+(heartbeat, "Coletar agora" na tela do servidor, criar/editar conta)
+sem nenhuma regressão.
+
+## 43. Governor de banco de dados (conexões/queries por hora)
+
+Substituto caseiro do dbgovernor do CloudLinux — só a parte que o
+MariaDB de fábrica já suporta nativamente (limite de conexões
+simultâneas e de queries/hora por usuário MySQL, via sintaxe padrão de
+`CREATE USER`/`ALTER USER ... WITH ...`). A parte que o dbgovernor de
+verdade faz ALÉM disso — limitar CPU/IO de uma query específica dentro
+do `mysqld` compartilhado — fica de fora, precisaria de ProxySQL ou um
+servidor MySQL modificado (decisão de infraestrutura separada, não é
+configuração).
+
+Sem instalação nova — reaproveita a conexão `mysql_admin` que
+`MysqlAdmin` já usa pra tudo (criar banco/usuário, GRANT). `0` é o
+valor nativo do MySQL/MariaDB pra "sem limite" (mesma conversão
+null→0 que os limites de cgroup já fazem com `infinity`).
+
+Nenhum passo de deploy novo — a Action (`database.set_user_limits`) já
+é despachada automaticamente pelo Painel na criação de cada usuário de
+banco (normal ou mestre) a partir do limite configurado no plano da
+conta, e reaplicada pelo botão "Reaplicar limites" já existente na
+tela da conta.
+
+**Teste pós-deploy**: criar um plano de teste com `max_db_connections`
+baixo (ex. 2), criar uma conta nesse plano, criar um banco, confirmar
+via `SHOW GRANTS FOR 'usuario'@'localhost'` que o `WITH MAX_USER_CONNECTIONS`
+aparece certo, e que uma 3ª conexão simultânea com esse usuário MySQL
+é recusada pelo servidor (`ER_USER_LIMIT_REACHED`).
+
+## 44. Fail2ban gerenciado (proteção contra força bruta)
+
+Substituto caseiro do "IP reputation"/força-bruta do CloudLinux/Imunify
+— só gerenciamento do fail2ban já instalado (listar IP banido + botão
+de desbanir na tela do servidor), não um sistema de reputação próprio.
+
+```
+dnf install -y fail2ban
+
+systemctl enable --now fail2ban
+```
+
+Jail `sshd` já vem com filtro padrão no pacote. Jail `vsftpd` (a
+recomendação em texto que já existia na seção 33 deste README vira
+automação de verdade agora):
+
+```
+cat > /etc/fail2ban/jail.d/vsftpd.local << 'EOF'
+[vsftpd]
+enabled = true
+port = ftp,ftp-data,ftps,ftps-data
+logpath = /var/log/vsftpd.log
+maxretry = 5
+bantime = 3600
+EOF
+
+systemctl restart fail2ban
+```
+
+Sudoers (script novo):
+
+```
+chmod +x scripts/manage-fail2ban.sh
+git update-index --chmod=+x scripts/manage-fail2ban.sh
+
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+**Teste pós-deploy**: banir um IP de teste manualmente
+(`fail2ban-client set sshd banip 203.0.113.9`), confirmar que ele
+aparece na tela "Segurança" do servidor no Painel, clicar em
+"Desbanir" e confirmar (`fail2ban-client status sshd`) que ele some da
+lista.
+
+## 45. Scanner de malware (ClamAV)
+
+```
+dnf install -y clamav clamav-update
+
+# Assinaturas iniciais (pode demorar alguns minutos na primeira vez)
+freshclam
+
+# Confirmar que o timer de atualização de assinatura já vem ativo
+systemctl status clamav-freshclam.timer
+```
+
+Nenhum sudoers novo — o `clamscan` roda como o próprio usuário
+`arcnpagent` sobre o home da conta (arcnpagent já tem ACL de leitura
+via o mesmo mecanismo usado pelo gerenciador de arquivos), e a
+quarentena usa o script de arquivo já existente pattern-wise (não
+precisa de privilégio de root pra mover arquivo dentro do próprio home
+da conta que o Agent já consegue navegar).
+
+**Teste pós-deploy**: baixar o arquivo de teste EICAR
+(`https://secure.eicar.org/eicar.com`, uma assinatura de teste
+inofensiva reconhecida por qualquer antivírus) pra dentro do
+`public_html` de uma conta de teste, disparar "Escanear agora" pelo
+Painel, confirmar que aparece como infectado, colocar em quarentena e
+confirmar que o arquivo some de `public_html` e aparece em
+`.quarantine/` dentro do home da conta, depois restaurar e confirmar
+que volta pro lugar original.
+
+## 46. Sinalização de CMS desatualizado
+
+Sem instalação nova — só lê `wp-includes/version.php` da instalação já
+existente (feita pelo instalador de WordPress, seção 36) e compara com
+a API pública do wordpress.org. Nenhum passo de deploy.
+
+**Teste pós-deploy**: instalar um WordPress de teste (o instalador já
+existente), rodar o comando `security:check-cms-versions` manualmente
+(`php artisan security:check-cms-versions`) e confirmar que a versão
+detectada bate com a de verdade instalada.
+
+## 47. WAF (ModSecurity + OWASP CRS) — leia com atenção antes de aplicar em produção
+
+**Recomendação forte**: testar isso numa VPS de teste primeiro, nunca
+direto num servidor de produção com contas reais. É a integração mais
+arriscada de todo este README — um módulo dinâmico novo carregado no
+nginx que já está servindo tráfego real.
+
+```
+# Confirmar a versão exata do nginx instalado ANTES de tudo — o módulo
+# dinâmico do ModSecurity precisa ser compilado contra essa mesma
+# versão/flags de build.
+nginx -V
+```
+
+Se existir pacote pronto pra distro (varia — AlmaLinux/RHEL 9
+normalmente NÃO tem no repositório padrão, pode precisar de um
+repositório de terceiros confiável ou compilar):
+
+```
+dnf install -y libmodsecurity libmodsecurity-devel
+# Pacote do conector nginx-modsecurity varia por distro — se não
+# existir, precisa compilar como módulo dinâmico contra o nginx já
+# instalado (--add-dynamic-module=... na mesma configure string que
+# gerou o nginx atual, ver "nginx -V" acima).
+```
+
+OWASP CRS:
+
+```
+mkdir -p /etc/nginx/modsecurity-crs
+curl -L https://github.com/coreruleset/coreruleset/archive/refs/tags/v4.x.x.tar.gz -o /tmp/crs.tar.gz
+tar -xzf /tmp/crs.tar.gz -C /etc/nginx/modsecurity-crs --strip-components=1
+cp /etc/nginx/modsecurity-crs/crs-setup.conf.example /etc/nginx/modsecurity-crs/crs-setup.conf
+```
+
+`/etc/nginx/modsecurity/modsecurity.conf` — **começar com
+`SecRuleEngine DetectionOnly`**, nunca `On` de cara:
+
+```
+SecRuleEngine DetectionOnly
+SecRequestBodyAccess On
+SecAuditEngine RelevantOnly
+SecAuditLog /var/log/nginx/modsecurity_audit.log
+Include /etc/nginx/modsecurity-crs/crs-setup.conf
+Include /etc/nginx/modsecurity-crs/rules/*.conf
+```
+
+`nginx.conf` (bloco `http {}`, carrega o módulo):
+
+```
+load_module modules/ngx_http_modsecurity_module.so;
+```
+
+O WAF é OPT-IN por domínio (`waf_enabled`, ver Painel) — o vhost só
+ganha as 2 diretivas abaixo quando o toggle está ligado (o stub
+`nginx-vhost.stub`/`nginx-vhost-ssl.stub` já tem o placeholder
+`{{waf_directives}}` cuidando disso):
+
+```
+modsecurity on;
+modsecurity_rules_file /etc/nginx/modsecurity/modsecurity.conf;
+```
+
+```
+nginx -t && systemctl reload nginx
+```
+
+**Depois de rodar em `DetectionOnly` por um tempo sem falso positivo
+afetando conta real** (conferir `/var/log/nginx/modsecurity_audit.log`),
+trocar pra `SecRuleEngine On` manualmente — o painel não faz essa
+troca sozinho.
+
+**Teste pós-deploy**: ligar o WAF numa conta de teste, tentar uma
+requisição de SQLi óbvia (ex. `?id=1' OR '1'='1`) contra um domínio
+dessa conta, confirmar que aparece no `modsecurity_audit.log` (modo
+`DetectionOnly`) ou que é bloqueada (modo `On`); confirmar que uma
+conta SEM o toggle ligado não é afetada em nada.
