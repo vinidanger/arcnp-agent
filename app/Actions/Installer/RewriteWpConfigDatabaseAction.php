@@ -35,11 +35,23 @@ class RewriteWpConfigDatabaseAction implements AgentAction
         $dbUsername = (string) ($payload['db_username'] ?? '');
         $dbPassword = (string) ($payload['db_password'] ?? '');
 
+        // A instalação de origem pode não estar na raiz do public_html
+        // (AppInstallation.path aceita subpasta, inclusive aninhada,
+        // ex. "blog/wp") — sem isso, a busca do wp-config.php da cópia
+        // sempre assumia a raiz, e falhava ("Caminho inválido.") pra
+        // qualquer instalação fora da raiz. Não usa Subdirectory::validate()
+        // (só aceita 1 segmento sem barra) — reaproveita a mesma defesa
+        // de path traversal que FileManagerPath::resolveExisting() já
+        // faz (join()+realpath+contenção), igual Read/WriteFileAction já
+        // fazem pra caminho arbitrário dentro da raiz.
+        $subdir = trim((string) ($payload['dest_subdir'] ?? ''), '/');
+        $relativePath = ($subdir !== '' ? "{$subdir}/" : '').'wp-config.php';
+
         if ($dbName === '' || $dbUsername === '' || $dbPassword === '') {
             throw new InvalidArgumentException('Credenciais de banco de dados são obrigatórias.');
         }
 
-        $path = FileManagerPath::resolveExisting($username, 'wp-config.php', $destDomain);
+        $path = FileManagerPath::resolveExisting($username, $relativePath, $destDomain);
         $content = file_get_contents($path);
 
         if ($content === false) {
@@ -51,7 +63,7 @@ class RewriteWpConfigDatabaseAction implements AgentAction
         $content = $this->replaceDefine($content, 'DB_PASSWORD', $dbPassword);
         $content = $this->replaceDefine($content, 'DB_HOST', 'localhost');
 
-        $this->processRunner->manageFile($username, 'write', 'wp-config.php', content: $content, root: $destDomain);
+        $this->processRunner->manageFile($username, 'write', $relativePath, content: $content, root: $destDomain);
 
         return ['path' => $path];
     }
