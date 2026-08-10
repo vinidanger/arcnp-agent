@@ -57,4 +57,18 @@ fi
 cp -a "$SRC"/. "$DEST"/
 chown -R "$USERNAME:$USERNAME" "$DEST"
 
+# cp -a preserva atributos da ORIGEM (inclusive ACL, via xattr) — não
+# dá pra confiar que isso deixa nginx/arcnpagent com leitura no
+# resultado final (foi exatamente o bug real encontrado em produção:
+# RewriteWpConfigDatabaseAction, sem sudo, falhava com "Caminho
+# inválido." porque não conseguia nem enxergar os arquivos recém-
+# copiados). Reaplica a MESMA ACL que create-addon-directory.sh já
+# concede na criação do diretório vazio, agora sobre o conteúdo
+# copiado — recursiva + default, pra qualquer coisa adicionada depois
+# também herdar.
+setfacl -R -m u:nginx:rx "$DEST"
+setfacl -d -m u:nginx:rx "$DEST"
+setfacl -R -m u:arcnpagent:rx "$DEST"
+setfacl -d -m u:arcnpagent:rx "$DEST"
+
 echo "OK"

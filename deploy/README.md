@@ -2248,14 +2248,27 @@ vsftpd` pendente).
 
 ## 45. Scanner de malware (ClamAV)
 
+**Correção pós-deploy real**: a documentação original desta seção
+assumia `clamav-freshclam.timer` — não existe com esse nome no
+AlmaLinux 9 (`clamav-freshclam-1.4.5`, EPEL). Os units reais que o
+pacote instala são `clamav-freshclam.service` (serviço persistente, o
+mecanismo tradicional — freshclam roda em loop, checando atualização
+no intervalo configurado em `Checks` do `freshclam.conf`) e, à parte,
+`clamav-freshclam-once.service`/`.timer` (variante "rodar uma vez",
+não é o que se quer aqui). Confirmado via `systemctl list-unit-files |
+grep -i clam` numa VPS real — a lista de serviços do Agent
+(`CollectServerInfoAction::KNOWN_UNITS`) foi corrigida pra monitorar
+`clamav-freshclam.service`, não o `.timer`.
+
 ```
 dnf install -y clamav clamav-update
 
 # Assinaturas iniciais (pode demorar alguns minutos na primeira vez)
 freshclam
 
-# Confirmar que o timer de atualização de assinatura já vem ativo
-systemctl status clamav-freshclam.timer
+# Serviço persistente de atualização — precisa ser habilitado manualmente
+systemctl enable --now clamav-freshclam.service
+systemctl status clamav-freshclam.service
 ```
 
 Nenhum sudoers novo — o `clamscan` roda como o próprio usuário
@@ -2513,6 +2526,33 @@ precisam de sudoers novo — o primeiro reaproveita a mesma conexão
 `mysql_admin` sem privilégio que o backup já usa, e o segundo passa
 pelo `manage-file.sh` (write), já autorizado.
 
+**2 bugs reais encontrados e corrigidos testando numa VPS real**:
+
+1. **WordPress instalado fora da raiz do `public_html`** (`AppInstallation.path`
+   não vazio, ex. instalação em `public_html/cara/`) fazia
+   `app.rewrite_wp_config_db` falhar com "Caminho inválido." — o
+   código sempre procurava `wp-config.php` na raiz da cópia, ignorando
+   a subpasta. Corrigido: `cloneToStaging()` (Painel) passa
+   `dest_subdir` (o `path` da instalação de origem) pro payload, e
+   `RewriteWpConfigDatabaseAction` (Agent) monta o caminho relativo
+   `{subdir}/wp-config.php` antes de resolver — mesma defesa de path
+   traversal de sempre (`FileManagerPath::resolveExisting()`), só que
+   agora considerando a subpasta certa.
+2. **`clone-site-files.sh` não reaplicava ACL nos arquivos copiados** —
+   mesmo com `path` vazio (WordPress na raiz), o mesmo erro "Caminho
+   inválido." persistia. Causa real: `cp -a` preserva os atributos da
+   ORIGEM (inclusive ACL, via xattr), mas isso não garante que o
+   resultado final tenha `arcnpagent`/`nginx` com leitura — e
+   `RewriteWpConfigDatabaseAction` lê o `wp-config.php` da cópia SEM
+   sudo, como o próprio `arcnpagent`. Sem a ACL, `realpath()` falha
+   com permissão negada em algum componente do caminho, indistinguível
+   de "arquivo não existe" pra quem só vê a mensagem final. Corrigido:
+   `clone-site-files.sh` agora reaplica explicitamente a MESMA ACL que
+   `create-addon-directory.sh` já concede na criação do diretório
+   vazio (`setfacl -R -m u:nginx:rx` / `u:arcnpagent:rx`, mais `-d`
+   pra qualquer coisa adicionada depois herdar também) — não confia
+   mais que `cp -a` preserva isso sozinho.
+
 **Teste pós-deploy**: no Painel, abrir uma conta de hospedagem ativa
 (com pelo menos um domínio principal servindo algo real) → aba
 Domínios → "Criar cópia de teste (staging)" → confirmar prefixo
@@ -2522,8 +2562,8 @@ STAGING e responde no navegador com o MESMO conteúdo da produção; (b)
 se a conta tem banco, `mysql -e "SHOW DATABASES LIKE '%_staging%'"`
 mostra o banco novo com as mesmas tabelas/linhas do banco de origem;
 (c) se a instalação de origem é WordPress, o `wp-config.php` da cópia
-(`~/domains/staging.{domínio}/public_html/wp-config.php`) aponta pro
-banco NOVO, não pro de produção — confirmar abrindo o site de staging
-e navegando (login de admin do WP deve bater com o de produção, já que
-os dados foram clonados, mas qualquer alteração feita ali não deve
-refletir no site de produção).
+(`~/domains/staging.{domínio}/public_html/{path-da-instalação, se
+houver}/wp-config.php`) aponta pro banco NOVO, não pro de produção —
+confirmar abrindo o site de staging e navegando (login de admin do WP
+deve bater com o de produção, já que os dados foram clonados, mas
+qualquer alteração feita ali não deve refletir no site de produção).

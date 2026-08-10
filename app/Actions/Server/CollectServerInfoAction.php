@@ -36,7 +36,7 @@ class CollectServerInfoAction implements AgentAction
         'ttyd',
         'arcnp-agent-queue',
         'fail2ban',
-        'clamav-freshclam.timer',
+        'clamav-freshclam.service',
     ];
 
     public function __construct(private ProcessRunner $processRunner)
