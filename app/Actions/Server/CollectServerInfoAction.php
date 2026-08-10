@@ -35,6 +35,8 @@ class CollectServerInfoAction implements AgentAction
         'vsftpd',
         'ttyd',
         'arcnp-agent-queue',
+        'fail2ban',
+        'clamav-freshclam.timer',
     ];
 
     public function __construct(private ProcessRunner $processRunner)

@@ -2,6 +2,7 @@
 # Uso:
 #   tail-log.sh nginx <domínio> <access|error> <linhas>
 #   tail-log.sh mail <linhas> [busca]
+#   tail-log.sh access-full <domínio>
 #
 # Só leitura, nunca muta nada. O domínio/caminho NUNCA vem pronto do
 # Painel — só o que der pra montar aqui dentro a partir de um domínio
@@ -34,6 +35,19 @@ case "$OPERATION" in
         [[ -f "$FILE" ]] || exit 0
 
         tail -n "$LINES" "$FILE"
+        ;;
+    access-full)
+        DOMAIN="${2:-}"
+
+        if [[ ! "$DOMAIN" =~ ^[a-zA-Z0-9.-]+$ ]]; then
+            echo "Domínio inválido: $DOMAIN" >&2
+            exit 1
+        fi
+
+        FILE="/var/log/nginx/${DOMAIN}-access.log"
+        [[ -f "$FILE" ]] || exit 0
+
+        cat "$FILE"
         ;;
     mail)
         LINES="${2:-200}"

@@ -6,6 +6,7 @@ use App\Actions\Backup\CreateBackupAction;
 use App\Actions\Backup\DeleteBackupAction;
 use App\Actions\Contracts\AgentAction;
 use App\Actions\Cron\SyncCronJobsAction;
+use App\Actions\Database\CloneDatabaseAction;
 use App\Actions\Database\CreateMysqlDatabaseAction;
 use App\Actions\Database\CreateMysqlMasterUserAction;
 use App\Actions\Database\DeleteMysqlDatabaseAction;
@@ -19,6 +20,7 @@ use App\Actions\Dns\CreateDnsZoneAction;
 use App\Actions\Ftp\SyncFtpAccountsAction;
 use App\Actions\Dns\DeleteDnsZoneAction;
 use App\Actions\Dns\UpdateDnsZoneRecordsAction;
+use App\Actions\Files\CloneSiteFilesAction;
 use App\Actions\Files\CompressFilesAction;
 use App\Actions\Files\CreateDirectoryAction;
 use App\Actions\Files\CreateFileAction;
@@ -31,6 +33,7 @@ use App\Actions\Files\WriteFileAction;
 use App\Actions\Hosting\ReactivateHostingAccountAction;
 use App\Actions\Hosting\SuspendHostingAccountAction;
 use App\Actions\Installer\InstallWordPressAction;
+use App\Actions\Installer\RewriteWpConfigDatabaseAction;
 use App\Actions\Linux\CreateSystemUserAction;
 use App\Actions\Linux\DeleteSystemUserAction;
 use App\Actions\Mail\DeleteMailDkimAction;
@@ -62,6 +65,7 @@ use App\Actions\Web\DeleteHostedAppAction;
 use App\Actions\Web\DeleteVirtualHostAction;
 use App\Actions\Web\HostedAppStatusAction;
 use App\Actions\Web\RestartHostedAppAction;
+use App\Actions\Web\AnalyzeDomainTrafficAction;
 use App\Actions\Web\SyncFolderProtectionsAction;
 use App\Actions\Web\SyncHotlinkProtectionAction;
 use App\Actions\Web\SyncMimeTypesAction;
@@ -91,6 +95,7 @@ class ActionRegistry
         'database.create_master_user' => CreateMysqlMasterUserAction::class,
         'database.delete_master_user' => DeleteMysqlMasterUserAction::class,
         'database.set_user_limits' => SetMysqlUserLimitsAction::class,
+        'database.clone' => CloneDatabaseAction::class,
         'hosting.suspend' => SuspendHostingAccountAction::class,
         'hosting.reactivate' => ReactivateHostingAccountAction::class,
         'ssl.issue_certificate' => IssueSslCertificateAction::class,
@@ -106,11 +111,13 @@ class ActionRegistry
         'web.sync_hotlink_protection' => SyncHotlinkProtectionAction::class,
         'web.sync_mime_types' => SyncMimeTypesAction::class,
         'web.tail_domain_log' => TailDomainLogAction::class,
+        'web.analyze_traffic' => AnalyzeDomainTrafficAction::class,
         'app.create' => CreateHostedAppAction::class,
         'app.delete' => DeleteHostedAppAction::class,
         'app.restart' => RestartHostedAppAction::class,
         'app.status' => HostedAppStatusAction::class,
         'app.install_wordpress' => InstallWordPressAction::class,
+        'app.rewrite_wp_config_db' => RewriteWpConfigDatabaseAction::class,
         'backup.create' => CreateBackupAction::class,
         'backup.delete' => DeleteBackupAction::class,
         'files.list' => ListDirectoryAction::class,
@@ -122,6 +129,7 @@ class ActionRegistry
         'files.rename' => RenameFileAction::class,
         'files.compress' => CompressFilesAction::class,
         'files.extract' => ExtractArchiveAction::class,
+        'files.clone_site' => CloneSiteFilesAction::class,
         'disk.usage' => DiskUsageAction::class,
         'disk.sync_quota' => SyncDiskQuotaAction::class,
         'cron.sync' => SyncCronJobsAction::class,

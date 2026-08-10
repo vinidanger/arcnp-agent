@@ -210,6 +210,17 @@ class ProcessRunner
     }
 
     /**
+     * Copia o conteúdo de um diretório do home da conta pra outro —
+     * usado pelo clone de staging. O DESTINO precisa já existir (ver
+     * scripts/clone-site-files.sh) — normalmente criado por
+     * createAddonDirectory() logo antes.
+     */
+    public function cloneSiteFiles(string $username, string $sourceRelative, string $destRelative): void
+    {
+        $this->exec(['sudo', '-n', base_path('scripts/clone-site-files.sh'), $username, $sourceRelative, $destRelative], timeout: 120);
+    }
+
+    /**
      * Certbot/Let's Encrypt envolve chamada de rede externa — timeout
      * bem maior que os outros comandos (e por isso essa Action é
      * assíncrona no Agent, não roda inline na resposta HTTP). Devolve a
@@ -292,6 +303,31 @@ class ProcessRunner
         }
 
         file_put_contents($destinationPath, gzencode($result->output(), 6));
+    }
+
+    /**
+     * Import sem privilégio, espelhando dumpMysqlDatabase() — mesma
+     * conexão mysql_admin (já tem GRANT em qualquer banco da conta),
+     * senha via MYSQL_PWD. $sqlContent é o dump JÁ DESCOMPRIMIDO (quem
+     * chama decide se lê de um .sql.gz e faz gzdecode antes).
+     */
+    public function importMysqlDatabase(string $dbName, string $sqlContent): void
+    {
+        $config = config('database.connections.mysql_admin');
+
+        $result = Process::timeout(300)
+            ->env(['MYSQL_PWD' => $config['password']])
+            ->input($sqlContent)
+            ->run([
+                'mysql',
+                '--user='.$config['username'],
+                '--host='.($config['host'] ?? '127.0.0.1'),
+                $dbName,
+            ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Import mysql falhou ('.$dbName.'): '.trim($result->errorOutput()));
+        }
     }
 
     /**
@@ -584,6 +620,25 @@ class ProcessRunner
         return $result->output();
     }
 
+    /**
+     * Lê o access.log inteiro (não só as últimas N linhas — usado pelo
+     * analytics de tráfego, que precisa contar o dia inteiro). Timeout
+     * maior que tailNginxLog() de propósito: um log de conta grande
+     * pode levar mais que os 30s padrão só pra ler do disco.
+     */
+    public function readFullAccessLog(string $domain): string
+    {
+        $result = Process::timeout(60)->run([
+            'sudo', '-n', base_path('scripts/tail-log.sh'), 'access-full', $domain,
+        ]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Falha ao ler log: '.trim($result->errorOutput() ?: $result->output()));
+        }
+
+        return $result->output();
+    }
+
     public function tailMailLog(int $lines, ?string $search): string
     {
         $result = Process::timeout(30)->run([
@@ -695,6 +750,7 @@ class ProcessRunner
         'named' => ['named', '-v'],
         'vsftpd' => ['vsftpd', '-v'],
         'ttyd' => ['ttyd', '--version'],
+        'fail2ban' => ['fail2ban-client', '--version'],
     ];
 
     private function detectServiceVersion(string $unit): ?string

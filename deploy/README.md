@@ -2441,3 +2441,89 @@ requisição de SQLi óbvia (ex. `?id=1' OR '1'='1`) e confirmar no
 `949110`) — em `DetectionOnly` só loga (`ModSecurity: Warning...`),
 não bloqueia; confirmar que uma conta SEM o toggle ligado não é
 afetada em nada.
+
+## 48. Rotação de log dos vhosts + analytics de tráfego self-hosted
+
+**Achado real, corrigido nesta seção**: cada domínio grava seu próprio
+`/var/log/nginx/{domínio}-access.log`/`{domínio}-error.log` (ver seção
+22) desde o início do projeto, mas **nenhuma rotação de log foi
+configurada em lugar nenhum** — esses arquivos crescem pra sempre. Isso
+nunca tinha sido um problema bloqueante até o Painel passar a depender
+de ler esses arquivos de verdade pra gerar estatística de tráfego
+(`web.analyze_traffic`, síncrono, chamado 1x/dia pelo comando
+`traffic:collect` do Painel).
+
+```
+cat > /etc/logrotate.d/arcnp-domains << 'EOF'
+/var/log/nginx/*-access.log /var/log/nginx/*-error.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
+EOF
+```
+
+`copytruncate` de propósito (copia o conteúdo atual pra um arquivo novo
+e trunca o original NO LUGAR, em vez de renomear+recriar) — evita ter
+que rastrear offset/inode entre execuções do parser de tráfego: como o
+arquivo nunca muda de identidade, uma leitura completa 1x/dia é segura
+contanto que rode ANTES do horário da rotação. O `traffic:collect` do
+Painel já está agendado pra `23:55` especificamente por causa disso —
+`logrotate` do sistema normalmente roda de madrugada (via
+`/etc/cron.daily`), então há folga confortável entre os dois. Se o
+horário do `cron.daily` desse servidor for customizado pra antes da
+meia-noite, ajuste um dos dois lados pra manter a ordem "coleta, depois
+rotaciona".
+
+**Teste pós-deploy**: `logrotate -d /etc/logrotate.d/arcnp-domains`
+(modo "dry run", só mostra o que faria, não roda de verdade) pra
+confirmar que o arquivo de config foi lido sem erro de sintaxe; depois
+de um ciclo real, confirmar que `{domínio}-access.log.1.gz` apareceu e
+que o `.log` atual continuou sendo escrito pelo nginx sem precisar de
+`nginx -s reopen` (o `copytruncate` não troca o file descriptor que o
+nginx já tem aberto, só o conteúdo — é exatamente por isso que essa
+opção foi escolhida em vez do `create`/`postrotate` padrão, que exigiria
+sinalizar o nginx a cada rotação).
+
+## 49. Clone de site pra staging (item 3, "4 ideias criativas")
+
+Sem instalação nova de pacote — reaproveita `cp`/`mysqldump`/`mysql`
+já presentes no servidor. Só precisa do script novo autorizado no
+sudoers (`scripts/clone-site-files.sh`, chamado pela Action
+`files.clone_site`) — **achado durante a revisão**: esse script já
+existia no repositório mas nunca tinha sido adicionado ao
+`deploy/sudoers/arcnp-agent`, o que faria o clone falhar com erro de
+permissão (`sudo: a password is required`) no primeiro uso real.
+Corrigido na mesma seção do arquivo de sudoers que lista os outros
+scripts de arquivo (`manage-file.sh`, `manage-archive.sh` etc.).
+
+```
+chmod +x /opt/arcnp-agent/scripts/clone-site-files.sh
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+O import de banco (`database.clone`, assíncrono) e a reescrita do
+`wp-config.php` da cópia (`app.rewrite_wp_config_db`, síncrona) não
+precisam de sudoers novo — o primeiro reaproveita a mesma conexão
+`mysql_admin` sem privilégio que o backup já usa, e o segundo passa
+pelo `manage-file.sh` (write), já autorizado.
+
+**Teste pós-deploy**: no Painel, abrir uma conta de hospedagem ativa
+(com pelo menos um domínio principal servindo algo real) → aba
+Domínios → "Criar cópia de teste (staging)" → confirmar prefixo
+(padrão `staging`) → Criar cópia. Depois de alguns segundos, confirmar:
+(a) o subdomínio `staging.{domínio}` aparece na tabela com o badge
+STAGING e responde no navegador com o MESMO conteúdo da produção; (b)
+se a conta tem banco, `mysql -e "SHOW DATABASES LIKE '%_staging%'"`
+mostra o banco novo com as mesmas tabelas/linhas do banco de origem;
+(c) se a instalação de origem é WordPress, o `wp-config.php` da cópia
+(`~/domains/staging.{domínio}/public_html/wp-config.php`) aponta pro
+banco NOVO, não pro de produção — confirmar abrindo o site de staging
+e navegando (login de admin do WP deve bater com o de produção, já que
+os dados foram clonados, mas qualquer alteração feita ali não deve
+refletir no site de produção).
