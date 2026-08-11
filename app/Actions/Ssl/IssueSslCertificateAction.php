@@ -12,6 +12,8 @@ use App\Support\NginxVhost;
 use App\Support\PhpFpmPool;
 use App\Support\PhpVersion;
 use App\Support\PublicPath;
+use App\Support\CacheDirectives;
+use App\Support\Http3Directives;
 use App\Support\Subdirectory;
 use App\Support\WafDirectives;
 
@@ -55,6 +57,8 @@ class IssueSslCertificateAction implements AgentAction
         $certPath = "/etc/letsencrypt/live/{$domain}/fullchain.pem";
         $keyPath = "/etc/letsencrypt/live/{$domain}/privkey.pem";
         $wafDirectives = WafDirectives::render((bool) ($payload['waf_enabled'] ?? false));
+        $cacheDirectives = CacheDirectives::render((bool) ($payload['cache_enabled'] ?? false), (int) ($payload['cache_version'] ?? 1));
+        $http3Directives = Http3Directives::render((bool) ($payload['http3_enabled'] ?? false));
 
         if ($mode === 'app') {
             $appPort = (int) ($payload['app_port'] ?? 0);
@@ -66,6 +70,8 @@ class IssueSslCertificateAction implements AgentAction
                 'ssl_cert_path' => $certPath,
                 'ssl_cert_key_path' => $keyPath,
                 'waf_directives' => $wafDirectives,
+                'cache_directives' => $cacheDirectives,
+                'http3_directives' => $http3Directives,
             ]);
         } else {
             $phpVersion = $payload['php_version'] ?? config('provisioning.default_php_version');
@@ -78,6 +84,8 @@ class IssueSslCertificateAction implements AgentAction
                 'ssl_cert_path' => $certPath,
                 'ssl_cert_key_path' => $keyPath,
                 'waf_directives' => $wafDirectives,
+                'cache_directives' => $cacheDirectives,
+                'http3_directives' => $http3Directives,
             ]);
         }
 

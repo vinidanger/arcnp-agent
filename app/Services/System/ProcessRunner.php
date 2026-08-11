@@ -1068,4 +1068,33 @@ class ProcessRunner
     {
         $this->exec(['sudo', '-n', base_path('scripts/manage-quarantine.sh'), $username, 'restore', $relPath, $quarantineFilename], 30);
     }
+
+    /**
+     * Gera .webp/.avif ao lado de cada .jpg/.jpeg/.png sob o home
+     * inteiro da conta (ver scripts/optimize-images.sh). Roda como
+     * root (sudo) porque ESCREVE arquivo novo dentro do home do
+     * cliente — diferente do scanForMalware() acima, que só lê.
+     * Timeout generoso (1800s), mesma ordem de grandeza do clamscan —
+     * conversão de imagem numa conta grande pode demorar.
+     *
+     * @return array{processed: int, converted: int, skipped: int}
+     */
+    public function optimizeImages(string $username): array
+    {
+        $result = Process::timeout(1800)->run(['sudo', '-n', base_path('scripts/optimize-images.sh'), $username]);
+
+        if ($result->failed()) {
+            throw new RuntimeException('Falha ao otimizar imagens: '.trim($result->errorOutput() ?: $result->output()));
+        }
+
+        $counts = ['processed' => 0, 'converted' => 0, 'skipped' => 0];
+
+        foreach (explode("\n", trim($result->output())) as $line) {
+            if (preg_match('/^(PROCESSED|CONVERTED|SKIPPED):(\d+)$/', trim($line), $matches)) {
+                $counts[strtolower($matches[1])] = (int) $matches[2];
+            }
+        }
+
+        return $counts;
+    }
 }

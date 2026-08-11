@@ -11,6 +11,7 @@ use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
 use App\Support\PhpFpmPool;
 use App\Support\PhpVersion;
+use App\Support\CacheDirectives;
 use App\Support\PublicPath;
 use App\Support\WafDirectives;
 use Illuminate\Support\Facades\File;
@@ -56,6 +57,7 @@ class CreateVirtualHostAction implements AgentAction
             'document_root' => $documentRoot,
             'php_fpm_socket' => PhpFpmPool::socketPath($username, $domain),
             'waf_directives' => WafDirectives::render((bool) ($payload['waf_enabled'] ?? false)),
+            'cache_directives' => CacheDirectives::render((bool) ($payload['cache_enabled'] ?? false), (int) ($payload['cache_version'] ?? 1)),
         ]);
 
         NginxVhost::writeTested($configPath, $contents, $this->processRunner);

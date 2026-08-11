@@ -50,3 +50,7 @@ arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-cli-zend-profile
 # deploy/README.md.
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-fail2ban.sh *
 arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/manage-quarantine.sh *
+
+# Otimização de imagem (WebP/AVIF, paridade com LiteSpeed) — escreve
+# arquivo novo dentro do home do cliente, precisa de root.
+arcnpagent ALL=(root) NOPASSWD: /opt/arcnp-agent/scripts/optimize-images.sh *

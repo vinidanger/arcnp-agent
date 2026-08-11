@@ -12,6 +12,7 @@ use App\Support\FileManagerPath;
 use App\Support\HostedAppUnit;
 use App\Support\LinuxUsername;
 use App\Support\NginxVhost;
+use App\Support\Http3Directives;
 use App\Support\Subdirectory;
 use App\Support\WafDirectives;
 use InvalidArgumentException;
@@ -99,6 +100,7 @@ class CreateHostedAppAction implements AgentAction
                     'ssl_cert_path' => "/etc/letsencrypt/live/{$domain}/fullchain.pem",
                     'ssl_cert_key_path' => "/etc/letsencrypt/live/{$domain}/privkey.pem",
                     'waf_directives' => $wafDirectives,
+                    'http3_directives' => Http3Directives::render((bool) ($payload['http3_enabled'] ?? false)),
                 ])
                 : $this->templateRenderer->render('nginx-vhost-app', [
                     'domain' => $domain,

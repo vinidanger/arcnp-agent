@@ -40,6 +40,8 @@ use App\Actions\Mail\TailMailLogAction;
 use App\Actions\Php\ListPhpExtensionsAction;
 use App\Actions\Php\SyncAccountPhpPoolsAction;
 use App\Actions\Php\TogglePhpExtensionAction;
+use App\Actions\Redis\CreateRedisUserAction;
+use App\Actions\Redis\DeleteRedisUserAction;
 use App\Actions\Resources\GetResourceUsageAction;
 use App\Actions\Resources\SetResourceLimitsAction;
 use App\Actions\Security\CheckWordPressVersionAction;
@@ -61,6 +63,7 @@ use App\Actions\Web\DeleteAddonDomainAction;
 use App\Actions\Web\DeleteHostedAppAction;
 use App\Actions\Web\DeleteVirtualHostAction;
 use App\Actions\Web\HostedAppStatusAction;
+use App\Actions\Web\OptimizeImagesAction;
 use App\Actions\Web\RestartHostedAppAction;
 use App\Actions\Web\AnalyzeDomainTrafficAction;
 use App\Actions\Web\SyncFolderProtectionsAction;
@@ -100,6 +103,8 @@ class ActionRegistry
         'web.delete_addon_domain' => DeleteAddonDomainAction::class,
         'php.list_extensions' => ListPhpExtensionsAction::class,
         'php.toggle_extension' => TogglePhpExtensionAction::class,
+        'redis.create_user' => CreateRedisUserAction::class,
+        'redis.delete_user' => DeleteRedisUserAction::class,
         'web.update_vhost_php_version' => UpdateVirtualHostPhpVersionAction::class,
         'web.update_document_root' => UpdateDocumentRootAction::class,
         'web.sync_folder_protections' => SyncFolderProtectionsAction::class,
@@ -108,6 +113,7 @@ class ActionRegistry
         'web.sync_mime_types' => SyncMimeTypesAction::class,
         'web.tail_domain_log' => TailDomainLogAction::class,
         'web.analyze_traffic' => AnalyzeDomainTrafficAction::class,
+        'web.optimize_images' => OptimizeImagesAction::class,
         'app.create' => CreateHostedAppAction::class,
         'app.delete' => DeleteHostedAppAction::class,
         'app.restart' => RestartHostedAppAction::class,

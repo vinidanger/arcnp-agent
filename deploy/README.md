@@ -2501,3 +2501,275 @@ que o `.log` atual continuou sendo escrito pelo nginx sem precisar de
 nginx já tem aberto, só o conteúdo — é exatamente por isso que essa
 opção foi escolhida em vez do `create`/`postrotate` padrão, que exigiria
 sinalizar o nginx a cada rotação).
+
+## 49. Cache de página (fastcgi_cache) — paridade com LSCache
+
+Opt-in por domínio, sem módulo novo — `fastcgi_cache` já é nativo do
+nginx. "Purgar" não apaga arquivo do disco: incrementa `cache_version`
+(embutido na própria `fastcgi_cache_key`) e reescreve o vhost — as
+entradas da versão anterior ficam órfãs e são recicladas sozinhas pelo
+`inactive`/`max_size` abaixo (cache manager nativo do nginx, sem cron
+nem script novo). Sem isso não daria pra purgar seletivamente por
+domínio sem o módulo de terceiro `ngx_cache_purge` (mais uma
+compilação arriscada, mesma categoria da do WAF).
+
+Adicionar dentro do bloco `http {}` do `nginx.conf` principal (fora de
+qualquer vhost — é uma zona de cache compartilhada por todo o
+servidor, cada domínio só usa a própria fatia via a `cache_key`
+prefixada):
+
+```
+fastcgi_cache_path /var/cache/nginx/fastcgi levels=1:2 keys_zone=arcnp_cache:100m inactive=60m max_size=2g use_temp_path=off;
+```
+
+```
+mkdir -p /var/cache/nginx/fastcgi
+chown nginx:nginx /var/cache/nginx/fastcgi
+nginx -t && systemctl reload nginx
+```
+
+Regra de bypass é fixa nesta v1 (não configurável pelo Painel): pula
+cache em `POST`, em request com query string, em `/wp-admin/`,
+`wp-login.php`, `xmlrpc.php`, e em qualquer cookie de sessão/comentário
+do WordPress (`wordpress_logged_in_`, `wp-postpass_`,
+`comment_author_`) — ver `App\Support\CacheDirectives` (Agent).
+
+**Teste pós-deploy**: ligar o cache numa conta de teste com WordPress,
+visitar uma página pública 2x e confirmar o header `X-Cache-Status`
+mudando de `MISS` pra `HIT` na 2ª visita (`curl -I`); confirmar que uma
+página vista LOGADO (com o cookie `wordpress_logged_in_*`) nunca vira
+`HIT`; clicar "Limpar cache" no Painel e confirmar que a mesma URL
+volta a dar `MISS` na visita seguinte.
+
+## 50. Otimização de imagem (WebP/AVIF) — paridade com LiteSpeed
+
+Sem toggle por domínio na entrega — o `try_files` de fallback abaixo
+só troca de arquivo SE o `.webp` já existir ao lado do original; se
+ninguém rodou a otimização ainda, cai no comportamento de sempre, sem
+diferença nenhuma. Por isso a diretiva de SERVIR entra direto nos 2
+stubs que servem PHP (`nginx-vhost.stub`/`nginx-vhost-ssl.stub`) —
+os stubs de app Node/Python (`nginx-vhost-app*.stub`) ficam de fora de
+propósito: eles usam `proxy_pass`, e interceptar `/algo.png` pra servir
+direto do document root poderia roubar uma rota que o próprio processo
+da aplicação quisesse tratar.
+
+```
+dnf install -y libwebp-tools libavif-tools
+```
+
+Adicionar dentro do bloco `http {}` do `nginx.conf` principal:
+
+```
+map $http_accept $webp_suffix {
+    default   "";
+    "~*webp"  ".webp";
+}
+```
+
+```
+nginx -t && systemctl reload nginx
+chmod +x /opt/arcnp-agent/scripts/optimize-images.sh
+install -m 0440 -o root -g root deploy/sudoers/arcnp-agent /etc/sudoers.d/arcnp-agent
+visudo -c
+```
+
+GERAR os arquivos otimizados é opt-in por conta, sem agendamento
+automático nesta v1 (conversão de imagem é pesada de CPU/disco — rodar
+sozinho toda noite em toda conta seria surpresa desagradável de
+recurso) — botão manual "Otimizar imagens agora" no Painel.
+
+**Teste pós-deploy**: rodar a otimização numa conta de teste com
+algumas imagens `.jpg`/`.png` reais, confirmar que `{arquivo}.webp`
+aparece ao lado de cada uma (dono = usuário da conta, não root);
+visitar a página com `curl -H "Accept: image/webp" -I
+https://dominio/imagem.jpg` e confirmar que o `Content-Type` da
+resposta vira `image/webp` (o nginx trocou o arquivo servido); repetir
+sem o header `Accept: image/webp` e confirmar que continua servindo o
+`.jpg` original.
+
+## 51. Cache de objeto (Redis) — paridade com LiteSpeed
+
+1 instância Redis compartilhada por servidor, isolada por ACL de
+prefixo (Redis 6+) — mesma filosofia do MySQL (1 `mysqld`, N usuários
+isolados por GRANT), não 1 Redis por conta. Limite de memória é
+ADVISORY nesta v1, não aplicado de verdade: `maxmemory` do Redis é da
+INSTÂNCIA inteira, não por usuário ACL — limitar por conta de verdade
+exigiria uma instância dedicada por conta (mesmo salto de complexidade
+que o PHP-FPM deu, decisão consciente de não seguir esse caminho ainda).
+
+```
+dnf install -y redis php-pecl-redis6
+systemctl enable --now redis
+```
+
+Editar `/etc/redis/redis.conf` (ou `/etc/redis/6379.conf`, varia por
+empacotamento):
+
+```
+requirepass SENHA_ADMIN_FORTE_AQUI
+```
+
+```
+systemctl restart redis
+```
+
+No `.env` do Agent (usa o bloco `redis` padrão que o próprio esqueleto
+do Laravel já traz em `config/database.php` — nenhum código novo
+precisou adicionar essa conexão):
+
+```
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=SENHA_ADMIN_FORTE_AQUI
+REDIS_PORT=6379
+```
+
+`RedisAdmin` (Agent) fala com o Redis via `Redis::connection('default')
+->executeRaw([...])` — extensão `phpredis` nativa, sem pacote novo via
+composer.
+
+**Teste pós-deploy**: gerar credenciais pra uma conta de teste no
+Painel, confirmar login com `redis-cli --user {username} -a {senha}
+PING`; confirmar isolamento de verdade — `SET {username}:foo bar` deve
+funcionar, mas `SET outroprefixo:foo bar` (chave fora do próprio
+prefixo) deve devolver `NOPERM`; apagar a conta de teste e confirmar
+via `ACL LIST` que o usuário some.
+
+## 52. HTTP/3 (QUIC) — o item de maior risco desta leva, leia com atenção
+
+**Recomendação forte, mais forte ainda que a do WAF (seção 47)**: isso
+não é "compilar mais um módulo dinâmico" — é trocar o BINÁRIO INTEIRO
+do nginx e a lib TLS por baixo dele. Um binário mal compilado ou uma
+flag esquecida derruba TODOS os vhosts SSL do servidor de uma vez, não
+só o WAF. Testar numa VPS de teste separada primeiro, nunca direto num
+servidor com conta real — o `http3_enabled` do servidor (Painel) só
+deve ser marcado DEPOIS de confirmar com `curl --http3` que o binário
+novo está servindo QUIC de verdade (passo 6 abaixo).
+
+```
+# Confirmar a versão e TODAS as flags de build do nginx já instalado
+# ANTES de tudo — vai precisar reaproveitar essa lista inteira na
+# hora de compilar o binário novo, senão perde módulo (inclusive o
+# ngx_http_modsecurity_module da seção 47, se já estiver ativo).
+nginx -V
+```
+
+O nginx 1.20.1 (versão oficial usada até aqui neste README) **não tem
+suporte nativo a QUIC** — HTTP/3 só entrou no nginx a partir da 1.25,
+e mesmo a partir dela precisa ser compilado com `--with-http_v3_module`
+contra uma lib TLS com suporte a QUIC (o OpenSSL padrão do AlmaLinux 9
+NÃO tem esse suporte — precisa de `quictls`, um fork mantido pela
+comunidade, ou confirmar se já existe `OpenSSL >= 3.2` disponível no
+servidor antes de assumir que precisa compilar nada extra).
+
+Passo 1 — compilar o `quictls` (fork do OpenSSL com suporte a QUIC;
+pule este passo só se já tiver confirmado `openssl version` ≥ 3.2 no
+servidor):
+
+```
+dnf install -y gcc gcc-c++ make perl-core zlib-devel screen
+
+screen -S http3-build
+
+cd /usr/local/src
+git clone --depth 1 -b openssl-3.1.4-quic1 https://github.com/quictls/openssl quictls
+cd quictls
+./config --prefix=/usr/local/quictls --openssldir=/usr/local/quictls
+make -j"$(nproc)"
+make install_sw    # install_sw evita substituir o OpenSSL do sistema inteiro
+```
+
+Passo 2 — baixar nginx 1.25+ (ou mainline mais recente) e compilar
+reaproveitando **exatamente as mesmas flags** capturadas no `nginx -V`
+do passo anterior — mesma pegadinha já documentada na seção 47:
+esquecer um `--with-http_*`/`--add-dynamic-module` existente faz o
+binário novo perder funcionalidade que já estava em produção (WAF
+incluído, se já estiver compilado):
+
+```
+cd /usr/local/src
+curl -O http://nginx.org/download/nginx-1.25.5.tar.gz
+tar -xzf nginx-1.25.5.tar.gz
+cd nginx-1.25.5
+
+./configure \
+  --prefix=/usr/share/nginx --sbin-path=/usr/sbin/nginx --modules-path=/usr/lib64/nginx/modules \
+  --conf-path=/etc/nginx/nginx.conf --error-log-path=/var/log/nginx/error.log \
+  --http-log-path=/var/log/nginx/access.log \
+  [... reaproveitar TODOS os --with-http_*/--with-mail/--with-stream/
+       --add-dynamic-module etc. exatamente como aparecem no
+       "nginx -V" capturado no passo 1, incluindo o
+       --add-dynamic-module=/usr/local/src/ModSecurity-nginx se o WAF
+       (seção 47) já estiver ativo neste servidor ...] \
+  --with-http_v3_module \
+  --with-openssl=/usr/local/src/quictls
+
+make -j"$(nproc)"
+```
+
+(`--with-openssl` aponta pro CÓDIGO-FONTE do quictls baixado no passo
+1, não pro `--prefix` instalado — o nginx compila a lib TLS embutida
+no próprio binário, diferente do módulo dinâmico do WAF.)
+
+Passo 3 — **testar em VPS separada primeiro, nunca direto onde já tem
+conta ativa** (mesma recomendação da seção 47, reforçada aqui porque o
+risco é maior — troca de binário inteiro, não só um módulo dinâmico
+opcional). Só depois de confirmar que o binário novo sobe limpo e
+serve os vhosts existentes sem regressão (`nginx -t`, visitar um site
+de teste por HTTP/2 normal) é que vale prosseguir pro servidor real.
+
+Passo 4 — abrir a porta UDP (QUIC usa UDP, distinto do TCP 443 já
+aberto pra HTTP/1.1/2):
+
+```
+firewall-cmd --permanent --add-port=443/udp
+firewall-cmd --reload
+```
+
+Passo 5 — trocar o binário e recarregar:
+
+```
+nginx -t                      # com o binário ANTIGO ainda ativo, valida a config atual primeiro
+cp /usr/sbin/nginx /usr/sbin/nginx.bak-pre-http3   # backup do binário antigo, pra reverter rápido se precisar
+make install                  # dentro de /usr/local/src/nginx-1.25.5, substitui /usr/sbin/nginx
+nginx -t                      # agora valida com o binário NOVO
+systemctl restart nginx       # troca de binário exige restart, reload não basta
+```
+
+Passo 6 — confirmar que QUIC está sendo servido de verdade **antes**
+de marcar `http3_enabled=true` em qualquer servidor pelo Painel:
+
+```
+curl --http3 -I https://SEUDOMINIO.com
+# ou, sem curl com suporte a --http3 compilado: Chrome DevTools > Network >
+# coluna Protocol deve mostrar "h3" numa aba anônima nova (sem cache de protocolo antigo)
+```
+
+O `http3_enabled` é uma flag por SERVIDOR (não por domínio, diferente
+de WAF/cache) — uma vez marcada no Painel (form de edição do servidor,
+admin), a diretiva só é escrita no PRÓXIMO evento que já re-renderiza
+algum vhost SSL daquele servidor por outro motivo (emitir SSL, trocar
+PHP, etc. — as mesmas 7 Actions que já fazem o fan-out de
+`waf_directives`/`cache_directives`). Não existe um dispatch dedicado
+que reescreve TODOS os vhosts de uma vez só quando o checkbox é
+salvo — decisão deliberada, evita um re-render em massa arriscado no
+instante em que a flag muda. As duas diretivas geradas quando ligado
+(`App\Support\Http3Directives`, stubs `nginx-vhost-ssl.stub`/
+`nginx-vhost-app-ssl.stub`):
+
+```
+listen 443 quic reuseport;
+listen [::]:443 quic reuseport;
+add_header Alt-Svc 'h3=":443"; ma=86400';
+```
+
+**Teste pós-deploy — checklist completo, nada disso é testável fora
+de uma VPS Linux real com QUIC compilado**: confirmar `curl --http3`
+(passo 6) ANTES de marcar a flag; depois de marcada, forçar o
+re-render de um vhost de teste (ex. reemitir SSL) e repetir o
+`curl --http3` contra ESSE domínio especificamente; confirmar que um
+domínio SEM `http3_enabled` no servidor (ou que ainda não passou por
+nenhum re-render desde que a flag foi ligada) continua respondendo
+normal por HTTP/2, sem erro; se algo der errado, reverter é
+`cp /usr/sbin/nginx.bak-pre-http3 /usr/sbin/nginx && nginx -t &&
+systemctl restart nginx` (o binário antigo não tem QUIC, mas serve
+todo o resto normalmente) mais desmarcar `http3_enabled` no Painel.

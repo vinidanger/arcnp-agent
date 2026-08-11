@@ -15,6 +15,7 @@ server {
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
+{{http3_directives}}
     server_name {{domain}};
 
     ssl_certificate {{ssl_cert_path}};
