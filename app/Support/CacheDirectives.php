@@ -36,6 +36,7 @@ class CacheDirectives
             '',
             'fastcgi_cache arcnp_cache;',
             'fastcgi_cache_valid 200 60m;',
+            'fastcgi_ignore_headers Cache-Control Expires Set-Cookie;',
             'fastcgi_cache_bypass $skip_cache;',
             'fastcgi_no_cache $skip_cache;',
             "fastcgi_cache_key \"{$version}:\$scheme\$request_method\$host\$request_uri\";",
